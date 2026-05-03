@@ -1,0 +1,74 @@
+{
+	"name": "ai-codex-remote-bridge",
+	"displayName": "RemoteAI Codex Bridge",
+	"publisher": "our",
+	"version": "0.1.0",
+	"license": "MIT",
+	"private": true,
+	"engines": {
+		"vscode": "^1.105.0"
+	},
+	"extensionKind": [
+		"workspace"
+	],
+	"activationEvents": [
+		"onStartupFinished",
+		"onCommand:remoteai.codex.inspectWorkspace",
+		"onCommand:remoteai.codex.prepareRemoteCli",
+		"onCommand:remoteai.codex.assertWorkspacePath",
+		"onCommand:remoteai.codex.runWorkspaceSmoke",
+		"onCommand:remoteai.codex.applyApprovedPatch"
+	],
+	"main": "./out/extension",
+	"scripts": {
+		"vscode:prepublish": "node ../../node_modules/gulp/bin/gulp.js --gulpfile ../../build/gulpfile.extensions.js compile-extension:ai-codex-remote-bridge"
+	},
+	"contributes": {
+		"commands": [
+			{
+				"command": "remoteai.codex.inspectWorkspace",
+				"title": "Inspect Remote Codex Workspace",
+				"category": "RemoteAI"
+			},
+			{
+				"command": "remoteai.codex.prepareRemoteCli",
+				"title": "Prepare Remote Codex CLI",
+				"category": "RemoteAI"
+			},
+			{
+				"command": "remoteai.codex.assertWorkspacePath",
+				"title": "Assert RemoteAI Workspace Path",
+				"category": "RemoteAI"
+			},
+			{
+				"command": "remoteai.codex.runWorkspaceSmoke",
+				"title": "Run Remote Workspace Smoke",
+				"category": "RemoteAI"
+			},
+			{
+				"command": "remoteai.codex.applyApprovedPatch",
+				"title": "Apply Approved Codex Patch",
+				"category": "RemoteAI"
+			}
+		],
+		"configuration": {
+			"title": "RemoteAI Codex Bridge",
+			"properties": {
+				"remoteai.codex.remoteCliPath": {
+					"type": "string",
+					"default": "",
+					"description": "Absolute remote path to an existing Linux Codex CLI binary."
+				}
+			}
+		}
+	},
+	"capabilities": {
+		"untrustedWorkspaces": {
+			"supported": true
+		},
+		"virtualWorkspaces": true
+	},
+	"devDependencies": {
+		"@types/node": "22.x"
+	}
+}

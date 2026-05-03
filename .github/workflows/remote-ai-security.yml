@@ -1,0 +1,98 @@
+name: RemoteAI Security
+
+on:
+  pull_request:
+    branches:
+      - main
+      - 'release/*'
+  push:
+    branches:
+      - main
+      - 'release/*'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  codeql:
+    name: CodeQL
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: javascript-typescript
+
+      - name: Analyze
+        uses: github/codeql-action/analyze@v4
+
+  dependency-review:
+    name: Dependency Review
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Review dependency changes
+        uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: high
+
+  remote-ai-gate:
+    name: RemoteAI Gate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+
+      - name: Install Linux build tools
+        run: sudo apt-get update -y && sudo apt-get install -y build-essential pkg-config libx11-dev libx11-xcb-dev libxkbfile-dev libnotify-bin libkrb5-dev
+
+      - name: Install dependencies
+        run: npm ci
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: 1
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compile RemoteAI extensions
+        run: |
+          node ./node_modules/gulp/bin/gulp.js \
+            compile-extension:our-remote-ssh \
+            compile-extension:ai-codex-remote-bridge \
+            compile-extension:ai-approval-ui
+
+      - name: Run RemoteAI unit tests
+        run: |
+          npx mocha --timeout 10000 --ui=tdd \
+            build/remote-ai/test/*.test.js \
+            extensions/our-remote-ssh/src/test/*.test.js \
+            extensions/ai-codex-remote-bridge/src/test/*.test.js
+
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=critical
+
+      - name: Check diff hygiene
+        run: git diff --check

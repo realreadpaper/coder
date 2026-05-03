@@ -1,0 +1,213 @@
+name: RemoteAI Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Release tag to publish, for example v0.1.0'
+        required: true
+        type: string
+      draft:
+        description: 'Create or keep the GitHub Release as draft'
+        required: true
+        default: true
+        type: boolean
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  VSCODE_QUALITY: oss
+
+jobs:
+  codeql:
+    name: CodeQL
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: javascript-typescript
+
+      - name: Analyze
+        uses: github/codeql-action/analyze@v4
+
+  remote-ai-gate:
+    name: RemoteAI Gate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+
+      - name: Install Linux build tools
+        run: sudo apt-get update -y && sudo apt-get install -y build-essential pkg-config libx11-dev libx11-xcb-dev libxkbfile-dev libnotify-bin libkrb5-dev
+
+      - name: Install dependencies
+        run: npm ci
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: 1
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compile RemoteAI extensions
+        run: |
+          node ./node_modules/gulp/bin/gulp.js \
+            compile-extension:our-remote-ssh \
+            compile-extension:ai-codex-remote-bridge \
+            compile-extension:ai-approval-ui
+
+      - name: Run RemoteAI unit tests
+        run: |
+          npx mocha --timeout 10000 --ui=tdd \
+            build/remote-ai/test/*.test.js \
+            extensions/our-remote-ssh/src/test/*.test.js \
+            extensions/ai-codex-remote-bridge/src/test/*.test.js
+
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=critical
+
+      - name: Check diff hygiene
+        run: git diff --check
+
+  remote-server:
+    name: Remote Server
+    needs:
+      - codeql
+      - remote-ai-gate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+
+      - name: Install Linux build tools
+        run: sudo apt-get update -y && sudo apt-get install -y build-essential pkg-config libx11-dev libx11-xcb-dev libxkbfile-dev libnotify-bin libkrb5-dev
+
+      - name: Install dependencies
+        run: npm ci
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: 1
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Package RemoteAI server
+        run: scripts/remote-ai-package-release.sh
+        env:
+          REMOTE_AI_RELEASE_COMMIT: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
+          REMOTE_AI_RELEASE_OUT: dist/remote-ai-release
+
+      - name: Upload remote server artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: remote-ai-server
+          path: dist/remote-ai-release/remote-releases/**
+          if-no-files-found: error
+
+  macos-unsigned:
+    name: macOS unsigned app
+    needs:
+      - codeql
+      - remote-ai-gate
+    runs-on: macos-14
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+
+      - name: Install dependencies
+        run: npm ci
+        env:
+          npm_config_arch: arm64
+          VSCODE_ARCH: arm64
+          ELECTRON_SKIP_BINARY_DOWNLOAD: 1
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GYP_DEFINES: kerberos_use_rtld=false
+
+      - name: Package macOS app
+        run: scripts/remote-ai-package-darwin.sh
+        env:
+          VSCODE_ARCH: arm64
+          REMOTE_AI_RELEASE_OUT: dist/remote-ai-release
+
+      - name: Upload macOS app artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: remote-ai-darwin-arm64-unsigned
+          path: dist/remote-ai-release/client/**
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub Release
+    needs:
+      - remote-server
+      - macos-unsigned
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download release artifacts
+        uses: actions/download-artifact@v7
+        with:
+          path: dist
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
+          DRAFT_RELEASE: ${{ github.event_name != 'workflow_dispatch' || inputs.draft }}
+        run: |
+          set -euo pipefail
+
+          mapfile -t files < <(find dist -type f | sort)
+          if [[ "${#files[@]}" == "0" ]]; then
+            echo "No release artifacts found" >&2
+            exit 1
+          fi
+
+          draft_args=()
+          if [[ "$DRAFT_RELEASE" == "true" ]]; then
+            draft_args=(--draft)
+          fi
+
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" "${files[@]}" --clobber
+          else
+            gh release create "$RELEASE_TAG" "${files[@]}" \
+              "${draft_args[@]}" \
+              --target "$GITHUB_SHA" \
+              --title "RemoteAI $RELEASE_TAG" \
+              --notes "Automated RemoteAI release. Server and client artifacts were produced by GitHub Actions."
+          fi

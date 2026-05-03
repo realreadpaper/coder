@@ -1,0 +1,39 @@
+{
+	"name": "ai-approval-ui",
+	"displayName": "RemoteAI Approval UI",
+	"publisher": "our",
+	"version": "0.1.0",
+	"license": "MIT",
+	"private": true,
+	"engines": {
+		"vscode": "^1.105.0"
+	},
+	"extensionKind": [
+		"ui"
+	],
+	"activationEvents": [
+		"onCommand:remoteai.approval.request"
+	],
+	"main": "./out/extension",
+	"scripts": {
+		"vscode:prepublish": "node ../../node_modules/gulp/bin/gulp.js --gulpfile ../../build/gulpfile.extensions.js compile-extension:ai-approval-ui"
+	},
+	"contributes": {
+		"commands": [
+			{
+				"command": "remoteai.approval.request",
+				"title": "Request RemoteAI Approval",
+				"category": "RemoteAI"
+			}
+		]
+	},
+	"capabilities": {
+		"untrustedWorkspaces": {
+			"supported": true
+		},
+		"virtualWorkspaces": true
+	},
+	"devDependencies": {
+		"@types/node": "22.x"
+	}
+}

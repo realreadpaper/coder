@@ -1,0 +1,107 @@
+{
+	"name": "remote-ssh",
+	"displayName": "RemoteAI SSH",
+	"publisher": "our",
+	"version": "0.1.0",
+	"license": "MIT",
+	"private": true,
+	"engines": {
+		"vscode": "^1.105.0"
+	},
+	"extensionKind": [
+		"ui"
+	],
+	"activationEvents": [
+		"onResolveRemoteAuthority:ssh-remote",
+		"onCommand:opensshremotes.openEmptyWindowInCurrentWindow",
+		"onCommand:remoteai.ssh.connectToHost",
+		"onCommand:remoteai.ssh.openDashboard",
+		"onCommand:remoteai.ssh.showDiagnostics"
+	],
+	"enabledApiProposals": [
+		"resolvers",
+		"tunnels",
+		"contribRemoteHelp",
+		"contribViewsRemote"
+	],
+	"main": "./out/extension",
+	"scripts": {
+		"vscode:prepublish": "node ../../node_modules/gulp/bin/gulp.js --gulpfile ../../build/gulpfile.extensions.js compile-extension:our-remote-ssh"
+	},
+	"contributes": {
+		"commands": [
+			{
+				"command": "opensshremotes.openEmptyWindowInCurrentWindow",
+				"title": "Remote-SSH: Connect to Host",
+				"category": "RemoteAI"
+			},
+			{
+				"command": "remoteai.ssh.connectToHost",
+				"title": "Connect to SSH Host",
+				"category": "RemoteAI"
+			},
+			{
+				"command": "remoteai.ssh.openDashboard",
+				"title": "Open SSH Dashboard",
+				"category": "RemoteAI"
+			},
+			{
+				"command": "remoteai.ssh.showDiagnostics",
+				"title": "Show Diagnostics",
+				"category": "RemoteAI"
+			}
+		],
+		"configuration": {
+			"title": "RemoteAI SSH",
+			"properties": {
+				"remoteai.ssh.serverTarballPath": {
+					"type": "string",
+					"default": "",
+					"description": "Local path to the remote-ai-server tarball used when installing a missing remote server."
+				},
+				"remoteai.ssh.serverManifestPath": {
+					"type": "string",
+					"default": "",
+					"description": "Local path to a RemoteAI release manifest. Used to select commit, tarball and sha256 when serverTarballPath is not set."
+				},
+				"remoteai.ssh.commit": {
+					"type": "string",
+					"default": "",
+					"description": "Remote server commit directory. Defaults to the running application's commit, or dev when running from sources."
+				},
+				"remoteai.ssh.sshPath": {
+					"type": "string",
+					"default": "ssh",
+					"description": "OpenSSH executable path."
+				},
+				"remoteai.ssh.defaultRemotePath": {
+					"type": "string",
+					"default": "~",
+					"description": "Default remote folder path shown by the connect command."
+				}
+			}
+		},
+		"resourceLabelFormatters": [
+			{
+				"scheme": "vscode-remote",
+				"authority": "ssh-remote+*",
+				"formatting": {
+					"label": "${path}",
+					"separator": "/",
+					"tildify": true,
+					"workspaceSuffix": "SSH",
+					"workspaceTooltip": "RemoteAI SSH"
+				}
+			}
+		]
+	},
+	"capabilities": {
+		"untrustedWorkspaces": {
+			"supported": true
+		},
+		"virtualWorkspaces": true
+	},
+	"devDependencies": {
+		"@types/node": "22.x"
+	}
+}
