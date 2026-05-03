@@ -11,8 +11,23 @@ This fork implements Remote-SSH as a Code-OSS secondary development, not as a se
    - `remoteai.ssh.sshPath`: OpenSSH binary, default `ssh`.
    - `remoteai.ssh.defaultRemotePath`: folder shown by the connect command.
 3. Run `RemoteAI: Open SSH Dashboard` for the graphical connection console, or use `RemoteAI: Connect to SSH Host` / `Remote-SSH: Connect to Host` for the command-palette flow.
+   - Step 1 selects or enters the SSH host, for example `dev`.
+   - Step 2 browses the remote filesystem over SSH and selects the workspace folder.
+   - `~` and `~/...` are expanded on the remote side before listing directories.
 4. The resolver bootstraps `ssh-remote+HOST`, installs `~/.remote-ai-server/bin/COMMIT`, starts `bin/remote-ai-server`, opens an SSH local forward, and returns `ResolvedAuthority`.
 5. Code-OSS then uses the normal VS Code remote stack: remote FileService, remote Extension Host, terminals, search, Git, LSP and debug run against the remote server.
+
+## Chat UI Policy
+
+This build disables the product-level VS Code Chat UI instead of deleting the source tree. The disabled registration points are:
+
+- Workbench Chat, Inline Chat and Chat Sessions contribution imports.
+- Desktop Chat and Inline Chat contribution imports.
+- Terminal chat widgets, terminal chat agent tools and terminal inline-chat hint contributions.
+- Notebook inline chat contribution.
+- Search and Problems chat-context workbench contributions.
+
+The source modules remain in the repository because parts of VS Code, proposed API compatibility and third-party extensions can still reference chat-shaped types. `chatCoreServices.contribution.ts` registers only the dependency-injection services required by tasks, debug, MCP, language-model tools, webviews and extension-host customers; it does not register the Chat view, Chat command set, inline chat UI, terminal chat UI or chat status UI. `product.json` still keeps the proposed API entries needed by `openai.chatgpt`; removing those entries would be a separate compatibility decision and can break Codex extension activation.
 
 ## Codex Extension Support
 
@@ -135,9 +150,9 @@ node test/remote-ai/e2e/remoteAiFullE2E.js
 Fresh result on May 3, 2026:
 
 - `npm run compile`: passed with 0 errors.
-- RemoteAI unit tests: 53 passing.
+- RemoteAI unit tests: 57 passing.
 - `releaseDoctor`: passed for `remote-releases/dev-compat/manifest.json`.
-- GUI/SSH E2E against `ssh dev`: passed.
+- GUI/SSH E2E against `ssh dev`: passed, including Dashboard host entry, remote folder browser selection, remote workspace smoke, and approved Codex patch.
 - `git diff --check`: passed.
 
 Fresh `ssh dev` verification installed and launched:

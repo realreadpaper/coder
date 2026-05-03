@@ -204,9 +204,8 @@ import './contrib/notebook/browser/notebook.contribution.js';
 // Speech
 import './contrib/speech/browser/speech.contribution.js';
 
-// Chat
-import './contrib/chat/browser/chat.contribution.js';
-import './contrib/inlineChat/browser/inlineChat.contribution.js';
+// Chat platform services without Chat UI contributions
+import './contrib/chat/browser/chatCoreServices.contribution.js';
 import './contrib/mcp/browser/mcp.contribution.js';
 
 // Interactive
@@ -378,9 +377,6 @@ import './contrib/editSessions/browser/editSessions.contribution.js';
 
 // Remote Coding Agents
 import './contrib/remoteCodingAgents/browser/remoteCodingAgents.contribution.js';
-
-// Chat Sessions
-import './contrib/chat/browser/chatSessions.contribution.js';
 
 // Code Actions
 import './contrib/codeActions/browser/codeActions.contribution.js';

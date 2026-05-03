@@ -99,6 +99,16 @@ async function openDashboardAndConnect(page) {
 	const frame = await dashboardFrame(page);
 	await frame.locator('input[name="host"]').fill(HOST);
 	await frame.locator('input[name="remotePath"]').fill(REMOTE_ROOT);
+	await frame.locator('[data-command="browseRemoteFolder"]').click();
+	await page.locator('.quick-input-widget').waitFor({ timeout: 30_000 });
+	await page.locator('.quick-input-list .monaco-list-row').filter({ hasText: /Select this folder/ }).first().waitFor({ timeout: 30_000 });
+	await page.keyboard.press('Enter');
+	await page.locator('.quick-input-widget').waitFor({ state: 'hidden', timeout: 15_000 }).catch(() => undefined);
+	await frame.locator('input[name="remotePath"]').inputValue({ timeout: 15_000 }).then(value => {
+		if (value !== REMOTE_ROOT) {
+			throw new Error(`Remote folder picker selected ${value}, expected ${REMOTE_ROOT}`);
+		}
+	});
 	await frame.locator('[data-command="connect"]').click();
 }
 

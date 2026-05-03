@@ -116,6 +116,18 @@ export function renderDashboardHtml(options: DashboardRenderOptions): string {
 			display: grid;
 			gap: 14px;
 		}
+		.step {
+			display: grid;
+			gap: 10px;
+			padding: 12px;
+			border: 1px solid var(--panel-border);
+			border-radius: 8px;
+		}
+		.step-title {
+			color: var(--text);
+			font-size: 13px;
+			font-weight: 650;
+		}
 		label {
 			display: grid;
 			gap: 6px;
@@ -238,15 +250,24 @@ export function renderDashboardHtml(options: DashboardRenderOptions): string {
 			<section class="panel" aria-labelledby="connectionTitle">
 				<h2 id="connectionTitle">Connection</h2>
 				<form id="connectForm" class="form-grid">
-					<label>
-						SSH Host
-						<input name="host" value="${host}" list="sshHosts" autocomplete="off" spellcheck="false">
-						<datalist id="sshHosts">${hostOptions}</datalist>
-					</label>
-					<label>
-						Remote Folder
-						<input name="remotePath" value="${remotePath}" autocomplete="off" spellcheck="false">
-					</label>
+					<div class="step">
+						<div class="step-title">Step 1: SSH Host</div>
+						<label>
+							Host
+							<input name="host" value="${host}" list="sshHosts" autocomplete="off" spellcheck="false">
+							<datalist id="sshHosts">${hostOptions}</datalist>
+						</label>
+					</div>
+					<div class="step">
+						<div class="step-title">Step 2: Workspace Folder</div>
+						<label>
+							Remote Folder
+							<input name="remotePath" value="${remotePath}" autocomplete="off" spellcheck="false">
+						</label>
+						<div class="actions">
+							<button class="secondary" type="button" data-command="browseRemoteFolder">Browse Folders</button>
+						</div>
+					</div>
 					<div class="actions">
 						<button class="primary" type="submit" data-command="connect">Connect</button>
 						<button class="secondary" type="button" data-command="chooseTarball">Select Server Tarball</button>
@@ -301,6 +322,14 @@ export function renderDashboardHtml(options: DashboardRenderOptions): string {
 		document.querySelector('[data-command="chooseTarball"]').addEventListener('click', () => {
 			vscode.postMessage({ type: 'chooseTarball' });
 		});
+		document.querySelector('[data-command="browseRemoteFolder"]').addEventListener('click', () => {
+			const data = new FormData(form);
+			vscode.postMessage({
+				type: 'browseRemoteFolder',
+				host: String(data.get('host') || '').trim(),
+				remotePath: String(data.get('remotePath') || '').trim()
+			});
+		});
 		document.querySelector('[data-command="diagnostics"]').addEventListener('click', () => {
 			vscode.postMessage({ type: 'diagnostics' });
 		});
@@ -320,6 +349,9 @@ export function renderDashboardHtml(options: DashboardRenderOptions): string {
 			}
 			if (msg.type === 'tarballSelected') {
 				tarballPath.textContent = msg.path || 'Not configured';
+			}
+			if (msg.type === 'remoteFolderSelected') {
+				form.elements.remotePath.value = msg.path || '';
 			}
 		});
 	</script>

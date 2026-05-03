@@ -10,9 +10,11 @@ import { ConnectionHistoryEntry, updateConnectionHistory } from './connectionHis
 import { createDiagnosticsReport, DiagnosticsManifestStatus } from './diagnostics';
 import { renderDashboardHtml } from './dashboardRenderer';
 import { parseRemoteAiError } from './logParser';
+import { createListDirectoryScript, joinRemotePath, parentRemotePath, parseRemoteDirectoryListing } from './remoteDirectory';
 import { selectTarballFromManifest, RemoteAiReleaseManifest } from './releaseManifest';
 import { resolveSshRemoteAuthority, ResolvedSshRemote } from './resolver';
 import { parseSshConfig } from './sshConfig';
+import { sshExec } from './sshProcess';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -49,18 +51,22 @@ export function activate(context: vscode.ExtensionContext): void {
 	};
 
 	const connectCommand = async () => {
-		const host = await vscode.window.showInputBox({ prompt: 'SSH host', placeHolder: 'dev' });
+		const host = await vscode.window.showInputBox({
+			title: 'RemoteAI SSH: Connect to Host',
+			prompt: 'Step 1: SSH host',
+			placeHolder: 'dev'
+		});
 		if (!host) {
 			return;
 		}
 
 		const configuredPath = getSshConfiguration().get<string>('defaultRemotePath') || '~';
-		const remotePath = await vscode.window.showInputBox({ prompt: 'Remote folder path', value: configuredPath });
+		const remotePath = await pickRemoteFolder(host.trim(), configuredPath);
 		if (!remotePath) {
 			return;
 		}
 
-		await openRemoteFolder(host, remotePath);
+		await openRemoteFolder(host.trim(), remotePath);
 	};
 
 	context.subscriptions.push(vscode.commands.registerCommand('opensshremotes.openEmptyWindowInCurrentWindow', connectCommand));
@@ -208,6 +214,21 @@ function openDashboard(
 				await panel.webview.postMessage({ type: 'status', status: 'Ready', message: text });
 			}
 		}
+		if (message?.type === 'browseRemoteFolder') {
+			const host = String(message.host || '').trim();
+			const startPath = String(message.remotePath || initialRemotePath).trim() || initialRemotePath;
+			if (!host) {
+				await panel.webview.postMessage({ type: 'status', status: 'Ready', message: 'Choose an SSH host first.' });
+				return;
+			}
+			const selected = await pickRemoteFolder(host, startPath);
+			if (!selected) {
+				await panel.webview.postMessage({ type: 'status', status: 'Ready', message: 'Remote folder selection cancelled.' });
+				return;
+			}
+			await panel.webview.postMessage({ type: 'remoteFolderSelected', path: selected });
+			await panel.webview.postMessage({ type: 'status', status: 'Ready', message: `Selected ${selected}` });
+		}
 		if (message?.type === 'chooseTarball') {
 			const selected = await vscode.window.showOpenDialog({
 				canSelectFiles: true,
@@ -232,6 +253,54 @@ function openDashboard(
 			await showDiagnostics(context);
 		}
 	}, undefined, context.subscriptions);
+}
+
+async function pickRemoteFolder(host: string, initialPath: string): Promise<string | undefined> {
+	const configuration = getSshConfiguration();
+	const sshPath = configuration.get<string>('sshPath') || 'ssh';
+	let currentPath = initialPath || '~';
+
+	while (true) {
+		const listing = parseRemoteDirectoryListing((await sshExec(host, createListDirectoryScript(currentPath), {
+			sshPath,
+			timeoutMs: 15000
+		})).stdout);
+		currentPath = listing.path;
+		const items: Array<vscode.QuickPickItem & { readonly action: 'select' | 'parent' | 'child' | 'manual'; readonly path?: string }> = [
+			{ label: '$(check) Select this folder', description: currentPath, action: 'select', path: currentPath },
+			{ label: '$(edit) Enter path manually', description: currentPath, action: 'manual' },
+			{ label: '..', description: parentRemotePath(currentPath), action: 'parent', path: parentRemotePath(currentPath) },
+			...listing.directories.map(directory => ({
+				label: `$(folder) ${directory}`,
+				description: joinRemotePath(currentPath, directory),
+				action: 'child' as const,
+				path: joinRemotePath(currentPath, directory)
+			}))
+		];
+		const picked = await vscode.window.showQuickPick(items, {
+			title: `RemoteAI SSH: ${host}`,
+			placeHolder: 'Step 2: choose a remote workspace folder',
+			matchOnDescription: true
+		});
+		if (!picked) {
+			return undefined;
+		}
+		if (picked.action === 'select') {
+			return picked.path;
+		}
+		if (picked.action === 'manual') {
+			const typed = await vscode.window.showInputBox({
+				title: `RemoteAI SSH: ${host}`,
+				prompt: 'Remote folder path',
+				value: currentPath
+			});
+			if (typed) {
+				return typed.trim();
+			}
+			continue;
+		}
+		currentPath = picked.path || currentPath;
+	}
 }
 
 async function resolveConfiguredServerRelease(configuration: vscode.WorkspaceConfiguration): Promise<{ commit: string; tarballPath?: string; sha256?: string }> {

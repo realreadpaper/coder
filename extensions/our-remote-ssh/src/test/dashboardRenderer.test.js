@@ -24,8 +24,12 @@ suite('RemoteAI dashboard renderer', () => {
 		assert.match(html, /nonce="nonce-1"/);
 		assert.match(html, /name="host"/);
 		assert.match(html, /name="remotePath"/);
+		assert.match(html, /Step 1: SSH Host/);
+		assert.match(html, /Step 2: Workspace Folder/);
 		assert.match(html, /data-command="connect"/);
+		assert.match(html, /data-command="browseRemoteFolder"/);
 		assert.match(html, /data-command="diagnostics"/);
+		assert.match(html, /type: 'browseRemoteFolder'/);
 		assert.match(html, /type: 'diagnostics'/);
 		assert.match(html, /datalist id="sshHosts"/);
 		assert.match(html, /history-item/);
