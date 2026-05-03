@@ -26,6 +26,8 @@ This build disables the product-level VS Code Chat UI instead of deleting the so
 - Terminal chat widgets, terminal chat agent tools and terminal inline-chat hint contributions.
 - Notebook inline chat contribution.
 - Search and Problems chat-context workbench contributions.
+- Chat session commands contributed through the VS Code `chatSessions` extension point are kept callable by id, but are not exposed in Command Palette.
+- Command Palette additional "Ask ... in Chat" picks, Command Center Quick Chat picks, and empty-editor Open Chat watermarks are removed.
 
 The source modules remain in the repository because parts of VS Code, proposed API compatibility and third-party extensions can still reference chat-shaped types. `chatCoreServices.contribution.ts` registers only the dependency-injection services required by tasks, debug, MCP, language-model tools, webviews and extension-host customers; it does not register the Chat view, Chat command set, inline chat UI, terminal chat UI or chat status UI. `product.json` still keeps the proposed API entries needed by `openai.chatgpt`; removing those entries would be a separate compatibility decision and can break Codex extension activation.
 
@@ -150,9 +152,9 @@ node test/remote-ai/e2e/remoteAiFullE2E.js
 Fresh result on May 3, 2026:
 
 - `npm run compile`: passed with 0 errors.
-- RemoteAI unit tests: 57 passing.
+- RemoteAI unit tests: 58 passing.
 - `releaseDoctor`: passed for `remote-releases/dev-compat/manifest.json`.
-- GUI/SSH E2E against `ssh dev`: passed, including Dashboard host entry, remote folder browser selection, remote workspace smoke, and approved Codex patch.
+- GUI/SSH E2E against `ssh dev`: passed, including Chat/Inline Chat/New Chat/Chat: Command Palette checks, Dashboard host entry, remote folder browser selection, remote workspace smoke, and approved Codex patch.
 - `git diff --check`: passed.
 
 Fresh `ssh dev` verification installed and launched:

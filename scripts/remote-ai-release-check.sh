@@ -36,6 +36,7 @@ npx mocha --timeout 10000 --ui=tdd \
 
 if [[ "$RUN_E2E" == "1" ]]; then
 	step "gui ssh e2e"
+	node test/remote-ai/e2e/chatUiDisabledE2E.js
 	node test/remote-ai/e2e/remoteAiFullE2E.js
 else
 	step "gui ssh e2e skipped; set REMOTE_AI_RELEASE_CHECK_E2E=1 to enable"

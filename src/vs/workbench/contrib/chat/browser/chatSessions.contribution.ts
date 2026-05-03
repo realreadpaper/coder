@@ -282,7 +282,7 @@ export class ChatSessionsService extends Disposable implements IChatSessionsServ
 					title: localize2('interactiveSession.openNewSessionEditor', "New {0} Chat Editor", contribution.displayName),
 					category: CHAT_CATEGORY,
 					icon: Codicon.plus,
-					f1: true, // Show in command palette
+					f1: false,
 					precondition: ChatContextKeys.enabled
 				});
 			}

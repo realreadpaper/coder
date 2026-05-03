@@ -36,10 +36,6 @@ import { IEditorService } from '../../../services/editor/common/editorService.js
 import { IExtensionService } from '../../../services/extensions/common/extensions.js';
 import { createKeybindingCommandQuery } from '../../../services/preferences/browser/keybindingsEditorModel.js';
 import { IPreferencesService } from '../../../services/preferences/common/preferences.js';
-import { CHAT_OPEN_ACTION_ID } from '../../chat/browser/actions/chatActions.js';
-import { ASK_QUICK_QUESTION_ACTION_ID } from '../../chat/browser/actions/chatQuickInputActions.js';
-import { IChatAgentService } from '../../chat/common/chatAgents.js';
-import { ChatAgentLocation } from '../../chat/common/constants.js';
 
 export class CommandsQuickAccessProvider extends AbstractEditorCommandsQuickAccessProvider {
 
@@ -78,7 +74,6 @@ export class CommandsQuickAccessProvider extends AbstractEditorCommandsQuickAcce
 		@IPreferencesService private readonly preferencesService: IPreferencesService,
 		@IProductService private readonly productService: IProductService,
 		@IAiRelatedInformationService private readonly aiRelatedInformationService: IAiRelatedInformationService,
-		@IChatAgentService private readonly chatAgentService: IChatAgentService,
 	) {
 		super({
 			showAlias: !Language.isDefaultVariant(),
@@ -171,15 +166,6 @@ export class CommandsQuickAccessProvider extends AbstractEditorCommandsQuickAcce
 		if (picksSoFar.length || additionalPicks.length) {
 			additionalPicks.push({
 				type: 'separator'
-			});
-		}
-
-		const defaultAgent = this.chatAgentService.getDefaultAgent(ChatAgentLocation.Chat);
-		if (defaultAgent) {
-			additionalPicks.push({
-				label: localize('askXInChat', "Ask {0}: {1}", defaultAgent.fullName, filter),
-				commandId: this.configuration.experimental.askChatLocation === 'quickChat' ? ASK_QUICK_QUESTION_ACTION_ID : CHAT_OPEN_ACTION_ID,
-				args: [filter]
 			});
 		}
 

@@ -39,15 +39,11 @@ const toggleTerminal: WatermarkEntry = { text: localize({ key: 'watermark.toggle
 const startDebugging: WatermarkEntry = { text: localize('watermark.startDebugging', "Start Debugging"), id: 'workbench.action.debug.start', when: { web: ContextKeyExpr.equals('terminalProcessSupported', true) } };
 const openSettings: WatermarkEntry = { text: localize('watermark.openSettings', "Open Settings"), id: 'workbench.action.openSettings' };
 
-const showChat = ContextKeyExpr.and(ContextKeyExpr.equals('chatSetupHidden', false), ContextKeyExpr.equals('chatSetupDisabled', false));
-const openChat: WatermarkEntry = { text: localize('watermark.openChat', "Open Chat"), id: 'workbench.action.chat.open', when: { native: showChat, web: showChat } };
-
 const emptyWindowEntries: WatermarkEntry[] = coalesce([
 	showCommands,
 	...(isMacintosh && !isWeb ? [openFileOrFolder] : [openFile, openFolder]),
 	openRecent,
 	isMacintosh && !isWeb ? newUntitledFile : undefined, // fill in one more on macOS to get to 5 entries
-	openChat
 ]);
 
 const randomEmptyWindowEntries: WatermarkEntry[] = [
@@ -57,7 +53,6 @@ const randomEmptyWindowEntries: WatermarkEntry[] = [
 const workspaceEntries: WatermarkEntry[] = [
 	showCommands,
 	gotoFile,
-	openChat
 ];
 
 const randomWorkspaceEntries: WatermarkEntry[] = [
