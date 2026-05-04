@@ -9,7 +9,8 @@
 		"vscode": "^1.105.0"
 	},
 	"extensionKind": [
-		"workspace"
+		"workspace",
+		"ui"
 	],
 	"activationEvents": [
 		"onStartupFinished",

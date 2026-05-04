@@ -14,7 +14,7 @@ suite('RemoteAI validation launcher', () => {
 		assert.match(script, /'remote\.extensionKind':\s*\{/);
 		assert.match(script, /openai\.chatgpt/);
 		assert.match(script, /'openai\.chatgpt':\s*\['ui'\]/);
-		assert.match(script, /'our\.ai-codex-remote-bridge':\s*\['workspace'\]/);
+		assert.match(script, /'our\.ai-codex-remote-bridge':\s*\['workspace', 'ui'\]/);
 	});
 
 	test('loads the locally installed Codex extension and patches it for the right sidebar', () => {

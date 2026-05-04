@@ -14,17 +14,17 @@ const HOST = process.env.REMOTE_AI_TEST_SSH || 'dev';
 const REMOTE_ROOT = process.env.REMOTE_AI_TEST_WORKSPACE || '/home/hejianglong/remote-ai-e2e';
 const COMMIT = process.env.REMOTE_AI_TEST_COMMIT || 'dev-compat';
 const TARBALL = process.env.REMOTE_AI_TEST_TARBALL || path.join(ROOT, 'remote-releases/dev-compat/vscode-reh-linux-x64.tar.gz');
-const REMOTE_CODEX_CLI = process.env.REMOTE_AI_TEST_REMOTE_CODEX_CLI || '';
 const CODEX_E2E_MARKER = `RemoteAI remote Codex E2E edit ${Date.now()}`;
 
 async function main() {
 	assertNoLocalMirrorCodexPath(ROOT);
 	prepareRemoteFixture();
+	const remoteCodexCli = prepareRemoteCodexCli();
 
 	const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'remote-ai-e2e-user-'));
 	const logsPath = fs.mkdtempSync(path.join(os.tmpdir(), 'remote-ai-e2e-logs-'));
 	const localWorkspace = fs.mkdtempSync(path.join(os.tmpdir(), 'remote-ai-e2e-local-'));
-	writeSettings(userDataDir);
+	writeSettings(userDataDir, remoteCodexCli);
 
 	const app = await _electron.launch({
 		executablePath: electronPath(),
@@ -61,6 +61,7 @@ async function main() {
 			host: HOST,
 			remoteRoot: REMOTE_ROOT,
 			logsPath,
+			remoteCodexCli,
 			codexMarker: CODEX_E2E_MARKER
 		}, null, 2));
 	} finally {
@@ -73,7 +74,26 @@ function prepareRemoteFixture() {
 	ssh(`rm -rf ${shellQuote(`/home/hejianglong/.remote-ai-server/bin/${COMMIT}`)}`);
 }
 
-function writeSettings(userDataDir) {
+function prepareRemoteCodexCli() {
+	if (process.env.REMOTE_AI_TEST_REMOTE_CODEX_CLI) {
+		return process.env.REMOTE_AI_TEST_REMOTE_CODEX_CLI;
+	}
+	const output = cp.execFileSync('bash', ['scripts/remote-ai-prepare-codex.sh'], {
+		cwd: ROOT,
+		encoding: 'utf8',
+		env: {
+			...process.env,
+			REMOTE_AI_CODEX_HOST: HOST
+		}
+	}).trim();
+	const remotePath = output.split(/\r?\n/).filter(Boolean).at(-1);
+	if (!remotePath) {
+		throw new Error(`Remote Codex preparation did not return a path:\n${output}`);
+	}
+	return remotePath;
+}
+
+function writeSettings(userDataDir, remoteCodexCli) {
 	fs.mkdirSync(path.join(userDataDir, 'User'), { recursive: true });
 	fs.writeFileSync(path.join(userDataDir, 'User', 'settings.json'), `${JSON.stringify({
 		'remoteai.ssh.serverManifestPath': path.join(ROOT, 'remote-releases/dev-compat/manifest.json'),
@@ -81,7 +101,7 @@ function writeSettings(userDataDir) {
 		'remoteai.ssh.commit': COMMIT,
 		'remoteai.ssh.defaultRemotePath': REMOTE_ROOT,
 		'remoteai.ssh.sshPath': 'ssh',
-		'remoteai.codex.remoteCliPath': REMOTE_CODEX_CLI,
+		'remoteai.codex.remoteCliPath': remoteCodexCli,
 		'remoteai.codex.sandboxMode': 'danger-full-access',
 		'terminal.integrated.defaultProfile.linux': 'bash',
 		'terminal.integrated.profiles.linux': {

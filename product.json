@@ -43,7 +43,8 @@
 			"ui"
 		],
 		"our.ai-codex-remote-bridge": [
-			"workspace"
+			"workspace",
+			"ui"
 		]
 	},
 	"remoteAiAudit": {

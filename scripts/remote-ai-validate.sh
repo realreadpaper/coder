@@ -106,7 +106,7 @@ const settings = {
 	'remoteai.ssh.sshPath': 'ssh',
 	'remote.extensionKind': {
 		'openai.chatgpt': ['ui'],
-		'our.ai-codex-remote-bridge': ['workspace']
+		'our.ai-codex-remote-bridge': ['workspace', 'ui']
 	},
 	'remoteai.codex.remoteCliPath': remoteCodexCli,
 	'remoteai.codex.sandboxMode': 'danger-full-access',

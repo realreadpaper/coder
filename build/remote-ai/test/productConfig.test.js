@@ -35,7 +35,7 @@ suite('RemoteAI product configuration', () => {
 
 	test('runs Codex bridge in the workspace extension host', () => {
 		assert.deepStrictEqual(product.extensionKind['openai.chatgpt'], ['ui']);
-		assert.deepStrictEqual(product.extensionKind['our.ai-codex-remote-bridge'], ['workspace']);
+		assert.deepStrictEqual(product.extensionKind['our.ai-codex-remote-bridge'], ['workspace', 'ui']);
 		assert.strictEqual(product.extensionKindOverrides, undefined);
 	});
 
