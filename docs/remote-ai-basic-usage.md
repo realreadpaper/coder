@@ -42,6 +42,12 @@ The OpenAI Codex VS Code extension is still a VS Code extension. This fork suppo
 - Adding `our.ai-approval-ui` as a UI extension for approval requests.
 - Enforcing remote workspace path checks through `WorkspaceSandbox` before AI file operations are wired to writes or commands.
 
+RemoteAI runs Codex tasks directly in the workspace execution host:
+
+- Local workspaces use the local Codex CLI and local filesystem.
+- RemoteAI SSH workspaces use the Remote Extension Host, remote Linux Codex CLI, and remote workspace filesystem.
+- The previous local mirror plus rsync execution path is removed from production code.
+
 The bridge does not copy or modify the Codex extension. It provides the remote-side guardrails and platform selection needed for Codex to operate on the remote workspace through normal VS Code APIs.
 
 ## Server Packaging

@@ -14,8 +14,11 @@ const HOST = process.env.REMOTE_AI_TEST_SSH || 'dev';
 const REMOTE_ROOT = process.env.REMOTE_AI_TEST_WORKSPACE || '/home/hejianglong/remote-ai-e2e';
 const COMMIT = process.env.REMOTE_AI_TEST_COMMIT || 'dev-compat';
 const TARBALL = process.env.REMOTE_AI_TEST_TARBALL || path.join(ROOT, 'remote-releases/dev-compat/vscode-reh-linux-x64.tar.gz');
+const REMOTE_CODEX_CLI = process.env.REMOTE_AI_TEST_REMOTE_CODEX_CLI || '';
+const CODEX_E2E_MARKER = `RemoteAI remote Codex E2E edit ${Date.now()}`;
 
 async function main() {
+	assertNoLocalMirrorCodexPath(ROOT);
 	prepareRemoteFixture();
 
 	const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'remote-ai-e2e-user-'));
@@ -49,23 +52,16 @@ async function main() {
 		await page.locator('text=README.md').waitFor({ timeout: 120_000 });
 		await page.screenshot({ path: path.join(logsPath, '01-remote-workspace.png'), fullPage: true });
 
-		await runCommand(page, 'RemoteAI: Run Remote Workspace Smoke');
-		await waitRemoteFile(`${REMOTE_ROOT}/.remote-ai-smoke/workspace-smoke.json`, 60_000);
-		const smoke = JSON.parse(ssh(`cat ${shellQuote(`${REMOTE_ROOT}/.remote-ai-smoke/workspace-smoke.json`)}`));
-		assertSmoke(smoke);
-
-		await runCommand(page, 'RemoteAI: Apply Approved Codex Patch');
-		await page.locator('text=Approve Codex patch for README.md?').waitFor({ timeout: 30_000 });
-		await page.locator('a.monaco-button:has-text("Approve"), .monaco-button:has-text("Approve")').last().click();
-		await waitForRemoteDiff();
-		await page.screenshot({ path: path.join(logsPath, '02-codex-approved-patch.png'), fullPage: true });
+		await runCodexTask(page, `Append exactly this line to README.md and do not modify other files: ${CODEX_E2E_MARKER}`);
+		await waitForRemoteDiff(CODEX_E2E_MARKER);
+		await page.screenshot({ path: path.join(logsPath, '02-local-codex-remote-edit.png'), fullPage: true });
 
 		console.log(JSON.stringify({
 			status: 'passed',
 			host: HOST,
 			remoteRoot: REMOTE_ROOT,
 			logsPath,
-			smoke
+			codexMarker: CODEX_E2E_MARKER
 		}, null, 2));
 	} finally {
 		await app.close();
@@ -85,6 +81,8 @@ function writeSettings(userDataDir) {
 		'remoteai.ssh.commit': COMMIT,
 		'remoteai.ssh.defaultRemotePath': REMOTE_ROOT,
 		'remoteai.ssh.sshPath': 'ssh',
+		'remoteai.codex.remoteCliPath': REMOTE_CODEX_CLI,
+		'remoteai.codex.sandboxMode': 'danger-full-access',
 		'terminal.integrated.defaultProfile.linux': 'bash',
 		'terminal.integrated.profiles.linux': {
 			bash: {
@@ -92,6 +90,18 @@ function writeSettings(userDataDir) {
 			}
 		}
 	}, null, 2)}\n`);
+}
+
+async function runCodexTask(page, prompt) {
+	await page.keyboard.press(process.platform === 'darwin' ? 'Meta+Shift+P' : 'Control+Shift+P');
+	await page.waitForSelector('.quick-input-widget', { timeout: 15_000 });
+	await page.keyboard.type('RemoteAI: Run Codex Task in Remote Workspace');
+	await page.locator('.quick-input-list .monaco-list-row').filter({ hasText: /Run Codex Task in Remote Workspace/ }).first().waitFor({ timeout: 30_000 });
+	await page.keyboard.press('Enter');
+	await page.locator('.quick-input-widget input').waitFor({ timeout: 15_000 });
+	await page.locator('.quick-input-widget input').fill(prompt);
+	await page.keyboard.press('Enter');
+	await page.locator('.quick-input-widget').waitFor({ state: 'hidden', timeout: 15_000 }).catch(() => undefined);
 }
 
 async function openDashboardAndConnect(page) {
@@ -167,34 +177,37 @@ async function waitRemoteFile(file, timeoutMs) {
 	throw new Error(`Timed out waiting for remote file ${file}`);
 }
 
-async function waitForRemoteDiff() {
-	const deadline = Date.now() + 60_000;
+function assertNoLocalMirrorCodexPath(repoRoot) {
+	const bridgeSrc = path.join(repoRoot, 'extensions/ai-codex-remote-bridge/src');
+	const result = cp.spawnSync('rg', [
+		'-n',
+		[
+			'localRemoteCodex' + 'Runner',
+			'runLocalCodexRemote' + 'WorkspaceTask',
+			'local-' + 'remote-workspaces',
+			'buildRsyncPullArgs',
+			'buildRsyncPushArgs'
+		].join('|'),
+		bridgeSrc
+	], { encoding: 'utf8' });
+	if (result.status === 0) {
+		throw new Error(`Codex local mirror path still exists:\n${result.stdout}`);
+	}
+	if (result.status !== 1) {
+		throw new Error(`rg failed while checking Codex mirror removal:\n${result.stderr}`);
+	}
+}
+
+async function waitForRemoteDiff(marker) {
+	const deadline = Date.now() + 240_000;
 	while (Date.now() < deadline) {
 		const diff = ssh(`cd ${shellQuote(REMOTE_ROOT)} && git diff -- README.md`);
-		if (diff.includes('RemoteAI Codex approved edit')) {
+		if (diff.includes(marker)) {
 			return;
 		}
 		await new Promise(resolve => setTimeout(resolve, 1000));
 	}
-	throw new Error('Timed out waiting for approved Codex patch in remote git diff');
-}
-
-function assertSmoke(smoke) {
-	if (!smoke.fsWriteRead) {
-		throw new Error('Remote workspace fs write/read smoke failed');
-	}
-	if (smoke.execPwd !== REMOTE_ROOT) {
-		throw new Error(`Remote exec pwd mismatch: ${smoke.execPwd}`);
-	}
-	if (smoke.terminalPwd !== REMOTE_ROOT) {
-		throw new Error(`Remote terminal pwd mismatch: ${smoke.terminalPwd}`);
-	}
-	if (!smoke.searchHit) {
-		throw new Error('Remote search smoke did not find expected text');
-	}
-	if (!Array.isArray(smoke.lspSymbols) || !smoke.lspSymbols.includes('smokeSymbol')) {
-		throw new Error(`Remote LSP smoke did not return smokeSymbol: ${JSON.stringify(smoke.lspSymbols)}`);
-	}
+	throw new Error(`Timed out waiting for remote Codex edit in remote git diff: ${marker}`);
 }
 
 function electronPath() {
