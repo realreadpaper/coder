@@ -89,12 +89,15 @@ export function buildAuraRuntimeInstallScript(options: AuraRuntimeInstallScriptO
 		source: options.sourceKind,
 		sha256: options.sha256
 	});
+	const providerIdJson = JSON.stringify(options.providerId);
 	return `set -eu
 upload_path=${shellQuote(options.uploadPath)}
 install_dir=${shellQuote(options.installDir)}
 tmp_dir="$install_dir.tmp"
 registry_path="$HOME/.aura-code/runtimes/registry.json"
 provider_id=${shellQuote(options.providerId)}
+provider_id_json=${shellQuote(providerIdJson)}
+marker_json=${shellQuote(marker)}
 expected_sha=${shellQuote(options.sha256)}
 bin_relative=${shellQuote(options.binRelativePath)}
 rm -rf "$tmp_dir"
@@ -123,18 +126,56 @@ fi
 rm -rf "$install_dir"
 mv "$tmp_dir" "$install_dir"
 ln -sfn "$(basename "$install_dir")" "$(dirname "$install_dir")/current"
-node - "$registry_path" "$provider_id" <<'AURA_RUNTIME_NODE'
-const fs = require('fs');
-const registryPath = process.argv[2];
-const providerId = process.argv[3];
-const marker = ${JSON.stringify(marker)};
-let registry = { runtimes: {} };
-if (fs.existsSync(registryPath)) {
-	registry = JSON.parse(fs.readFileSync(registryPath, 'utf8'));
-}
-registry.runtimes[providerId] = { ...JSON.parse(marker), installedAt: new Date().toISOString() };
-fs.writeFileSync(registryPath, JSON.stringify(registry, null, 2));
-AURA_RUNTIME_NODE
+installed_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || date)"
+registry_tmp="$registry_path.tmp.$$"
+python_bin=""
+if command -v python3 >/dev/null 2>&1; then
+	python_bin=python3
+elif command -v python >/dev/null 2>&1; then
+	python_bin=python
+fi
+if [ -n "$python_bin" ]; then
+	if "$python_bin" - "$registry_path" "$provider_id" "$marker_json" "$installed_at" <<'AURA_RUNTIME_PY'
+import json
+import os
+import sys
+
+registry_path, provider_id, marker_json, installed_at = sys.argv[1:5]
+registry = {"runtimes": {}}
+if os.path.exists(registry_path):
+	try:
+		with open(registry_path, "r", encoding="utf-8") as handle:
+			registry = json.load(handle)
+	except Exception:
+		registry = {"runtimes": {}}
+if not isinstance(registry, dict):
+	registry = {"runtimes": {}}
+if not isinstance(registry.get("runtimes"), dict):
+	registry["runtimes"] = {}
+marker = json.loads(marker_json)
+marker["installedAt"] = installed_at
+registry["runtimes"][provider_id] = marker
+tmp_path = f"{registry_path}.tmp.{os.getpid()}"
+with open(tmp_path, "w", encoding="utf-8") as handle:
+	json.dump(registry, handle, indent=2)
+	handle.write("\\n")
+os.replace(tmp_path, registry_path)
+AURA_RUNTIME_PY
+	then
+		:
+	else
+		echo "aura-runtime-registry-python-failed" >&2
+		marker_with_installed="$(printf '%s' "$marker_json" | sed "s/}$/,\\"installedAt\\":\\"$installed_at\\"}/")"
+		printf '{"runtimes":{%s:%s}}\\n' "$provider_id_json" "$marker_with_installed" > "$registry_tmp"
+		mv "$registry_tmp" "$registry_path"
+		echo "aura-runtime-registry-fallback=shell"
+	fi
+else
+	marker_with_installed="$(printf '%s' "$marker_json" | sed "s/}$/,\\"installedAt\\":\\"$installed_at\\"}/")"
+	printf '{"runtimes":{%s:%s}}\\n' "$provider_id_json" "$marker_with_installed" > "$registry_tmp"
+	mv "$registry_tmp" "$registry_path"
+	echo "aura-runtime-registry-fallback=shell"
+fi
 rm -f "$upload_path"
 echo "aura-runtime-install=ok"
 `;

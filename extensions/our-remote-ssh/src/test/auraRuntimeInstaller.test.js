@@ -51,6 +51,22 @@ suite('Aura runtime installer scripts', () => {
 		assert.match(script, /current/);
 	});
 
+	test('install script does not require system node on the remote host', () => {
+		const script = buildAuraRuntimeInstallScript({
+			providerId: 'codex',
+			version: '0.128.0',
+			platformKey: 'linux-x64',
+			uploadPath: '/home/user/.aura-code/upload/codex.tar.gz',
+			installDir: '/home/user/.aura-code/runtimes/codex/0.128.0-linux-x64',
+			binRelativePath: 'bin/codex',
+			sha256: '0000000000000000000000000000000000000000000000000000000000000000',
+			sourceKind: 'bundled'
+		});
+		assert.doesNotMatch(script, /\bnode\b/);
+		assert.match(script, /python3/);
+		assert.match(script, /aura-runtime-registry-fallback/);
+	});
+
 	test('remote download script uses curl or wget', () => {
 		const script = buildAuraRuntimeRemoteDownloadScript({
 			url: 'https://registry.npmjs.org/@openai/codex/-/codex-0.128.0-linux-x64.tgz',
