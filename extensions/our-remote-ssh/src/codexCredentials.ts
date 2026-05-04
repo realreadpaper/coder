@@ -46,39 +46,52 @@ export function buildCodexCredentialSyncScript(options: CodexCredentialSyncScrip
 remote_codex_home=${shellQuote(options.remoteCodexHome)}
 overwrite=${shellQuote(options.overwrite ? '1' : '0')}
 mkdir -p "$remote_codex_home"
-node -e ${shellQuote(codexCredentialSyncNodeScript())} "$remote_codex_home" "$overwrite"
+python_bin=""
+if command -v python3 >/dev/null 2>&1; then
+	python_bin=python3
+elif command -v python >/dev/null 2>&1; then
+	python_bin=python
+else
+	echo "aura-codex-credentials-error missing-python" >&2
+	exit 86
+fi
+"$python_bin" -c ${shellQuote(codexCredentialSyncPythonScript())} "$remote_codex_home" "$overwrite"
 `;
 }
 
-function codexCredentialSyncNodeScript(): string {
+function codexCredentialSyncPythonScript(): string {
 	return `
-const fs = require('fs');
-const path = require('path');
-const remoteCodexHome = process.argv[1];
-const overwrite = process.argv[2] === '1';
-const allowed = new Set(${JSON.stringify(codexCredentialRelativePaths)});
-let input = '';
-process.stdin.setEncoding('utf8');
-process.stdin.on('data', chunk => input += chunk);
-process.stdin.on('end', () => {
-	const payload = JSON.parse(input || '{"files":[]}');
-	let written = 0;
-	let skipped = 0;
-	for (const file of payload.files || []) {
-		if (!allowed.has(file.relativePath)) {
-			throw new Error('unsupported credential file');
-		}
-		const target = path.join(remoteCodexHome, file.relativePath);
-		if (!overwrite && fs.existsSync(target)) {
-			skipped++;
-			continue;
-		}
-		fs.writeFileSync(target, Buffer.from(file.contentBase64, 'base64'), { mode: file.mode || 0o600 });
-		fs.chmodSync(target, file.mode || 0o600);
-		written++;
-	}
-	console.log('aura-codex-credentials=ok written=' + written + ' skipped=' + skipped);
-});
+import base64
+import json
+import os
+import sys
+
+remote_codex_home = sys.argv[1]
+overwrite = sys.argv[2] == "1"
+allowed = set(${JSON.stringify(codexCredentialRelativePaths)})
+payload = json.loads(sys.stdin.read() or '{"files":[]}')
+home_real = os.path.abspath(remote_codex_home)
+written = 0
+skipped = 0
+for file in payload.get("files") or []:
+	relative_path = file.get("relativePath")
+	if relative_path not in allowed:
+		raise SystemExit("unsupported credential file")
+	target = os.path.abspath(os.path.join(remote_codex_home, relative_path))
+	if os.path.commonpath([home_real, target]) != home_real:
+		raise SystemExit("credential target escaped remote home")
+	if not overwrite and os.path.exists(target):
+		skipped += 1
+		continue
+	mode = int(file.get("mode") or 0o600)
+	tmp_path = f"{target}.tmp.{os.getpid()}"
+	with open(tmp_path, "wb") as handle:
+		handle.write(base64.b64decode(file.get("contentBase64") or ""))
+	os.chmod(tmp_path, mode)
+	os.replace(tmp_path, target)
+	os.chmod(target, mode)
+	written += 1
+print(f"aura-codex-credentials=ok written={written} skipped={skipped}")
 `.trim();
 }
 

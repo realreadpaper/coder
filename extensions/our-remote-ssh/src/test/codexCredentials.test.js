@@ -32,9 +32,19 @@ suite('RemoteAI Codex credentials', () => {
 			remoteCodexHome: '/home/user/.codex',
 			overwrite: false
 		});
-		assert.match(script, /process\.stdin/);
-		assert.match(script, /existsSync/);
-		assert.match(script, /chmodSync/);
+		assert.match(script, /sys\.stdin/);
+		assert.match(script, /os\.path\.exists/);
+		assert.match(script, /os\.chmod/);
 		assert.doesNotMatch(script, /secret/);
+	});
+
+	test('sync script does not require system node on the remote host', () => {
+		const script = buildCodexCredentialSyncScript({
+			remoteCodexHome: '/home/user/.codex',
+			overwrite: false
+		});
+		assert.doesNotMatch(script, /\bnode\b/);
+		assert.match(script, /python3/);
+		assert.match(script, /aura-codex-credentials-error missing-python/);
 	});
 });
