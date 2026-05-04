@@ -3,6 +3,377 @@
 [![Bugs](https://img.shields.io/github/issues/microsoft/vscode/bug.svg)](https://github.com/microsoft/vscode/issues?utf8=✓&q=is%3Aissue+is%3Aopen+label%3Abug)
 [![Gitter](https://img.shields.io/badge/chat-on%20gitter-yellow.svg)](https://gitter.im/Microsoft/vscode)
 
+## Aura Code Fork
+
+这个仓库是一个基于 Code - OSS 的 Aura Code fork。目标是提供一个可自托管、可通过 OpenSSH 连接远程 Linux 工作区、并能让 AI agent 在正确工作区内读写文件的开发环境。
+
+当前重点不是替换 VS Code 的所有 Remote-SSH 能力，而是把最小可用闭环打通：
+
+- 本机运行 Code-OSS UI。
+- 通过 `ssh` 连接远程开发机。
+- 在远程机器上安装并启动兼容的 Code-OSS remote server。
+- Explorer、编辑器、搜索、终端、Git 和 LSP 都围绕远程工作区运行。
+- OpenAI Codex 原生侧栏在本地工作区时操作本地目录，在 SSH 工作区时通过 SSH wrapper 驱动远端 Codex。
+- 保留 `RemoteAI: Run Codex Task in Remote Workspace` 作为可自动化的单次任务入口。
+- 屏蔽 Code-OSS 原生 Chat / Inline Chat / New Chat 入口，避免和 Codex 侧栏混用。
+
+### 功能点
+
+#### RemoteAI SSH
+
+`extensions/our-remote-ssh` 提供 RemoteAI 的 SSH 入口：
+
+- `RemoteAI: Connect to SSH Host`
+- `RemoteAI: Open SSH Dashboard`
+- `RemoteAI: Show Diagnostics`
+- 兼容 `Remote-SSH: Connect to Host` 入口名。
+
+连接流程是两步式的：
+
+1. 输入或选择 SSH host，例如 `dev`。
+2. 浏览远程目录并打开工作区，例如 `/home/hejianglong/remote-ai-manual`。
+
+打开后，窗口会使用 `vscode-remote://ssh-remote+<host>/<path>` 作为工作区 URI。RemoteAI resolver 会通过本机 `ssh` 安装、启动远程 server，并建立本地端口转发。远程 server 的安装目录位于远端 `~/.remote-ai-server/bin/<commit>`。
+
+#### 远程工作区能力
+
+当前已验证的远程能力包括：
+
+- Explorer 读取远程目录。
+- 编辑器保存远程文件。
+- 集成终端运行在远程 Linux 目录。
+- `git status` / `git diff` 作用于远程仓库。
+- 全局搜索命中远程文件。
+- TypeScript LSP 在远程 Extension Host 中解析符号。
+- 内置 smoke 命令写入 `.remote-ai-smoke/workspace-smoke.json`。
+
+这些能力不依赖本地镜像同步。文件读写、终端命令、Git 和 LSP 都发生在远程 server / 远程 extension host 中。
+
+#### Codex 原生侧栏
+
+OpenAI Codex VS Code 扩展仍运行在本地 UI extension host。RemoteAI 对它做了两件事：
+
+1. 补丁打开右侧 secondary sidebar 的版本门槛，让 Codex 面板可以在当前 Code-OSS 版本中显示。
+2. 自动管理 `chatgpt.cliExecutable`，让 Codex app-server 在正确位置启动。
+
+行为规则：
+
+- 打开本地文件夹时，Codex 使用本机默认 CLI，直接操作本地工作区。
+- 通过 RemoteAI SSH 打开远程工作区时，RemoteAI 自动生成 SSH wrapper，并把 `chatgpt.cliExecutable` 指向这个 wrapper。
+- wrapper 会通过 `ssh <host>` 进入远程目录，然后启动远端 Linux Codex：
+
+```sh
+cd <remote-workspace>
+exec <remote-codex> --sandbox danger-full-access --dangerously-bypass-approvals-and-sandbox app-server ...
+```
+
+这样右侧 Codex 原生侧栏的 `pwd`、shell 工具和 patch 工具都发生在远程工作目录中，而不是在 macOS 本地尝试访问 `/home/...`。
+
+当 RemoteAI 刚切换 `chatgpt.cliExecutable` 时，会提示 `Reload Window`。需要重载窗口，让旧的本机 `codex app-server` 退出并由 wrapper 重新启动。否则已经运行中的 Codex 进程仍可能是旧的 `/usr/local/bin/codex app-server`。
+
+#### RemoteAI Codex Bridge
+
+`extensions/ai-codex-remote-bridge` 提供命令式 Codex 入口：
+
+- `RemoteAI: Run Codex Task in Remote Workspace`
+- `RemoteAI: Run Remote Workspace Smoke`
+- `RemoteAI: Apply Approved Codex Patch`
+- `RemoteAI: Inspect Remote Codex Workspace`
+
+这个入口适合自动化和 E2E 验证。它在 SSH 工作区中调用远端 Linux Codex CLI，使用：
+
+```sh
+codex exec --cd <remote-workspace> --sandbox danger-full-access --dangerously-bypass-approvals-and-sandbox ...
+```
+
+它和 Codex 原生侧栏的区别是：
+
+- Codex 原生侧栏适合连续聊天式交互。
+- `RemoteAI: Run Codex Task in Remote Workspace` 适合提交一次明确任务并等待完成。
+
+两者在 SSH 工作区中的目标一致：都必须让 Codex 工具实际运行在远程目录，而不是让本机 Codex 去读远程绝对路径。
+
+#### 远端 Codex CLI
+
+当前远端 Codex 由 `scripts/remote-ai-prepare-codex.sh` 准备。后续会迁移到 Aura Code Runtime Manager 统一管理，Codex、Claude Code 等 AI CLI 都会作为 provider runtime 接入。
+
+现有脚本会：
+
+- 根据本机 Codex 版本选择 `@openai/codex@<version>-linux-x64` 或 `linux-arm64` 包。
+- 上传并解包到远端 `~/.remote-ai-server/codex/<version>-<platform>`。
+- 创建 `bin/codex` symlink。
+- 可同步本机 `~/.codex/config.toml` 和 `~/.codex/auth.json` 到远端。
+
+验证脚本会把远端路径写入：
+
+```json
+"remoteai.codex.remoteCliPath": "/home/hejianglong/.remote-ai-server/codex/0.128.0-linux-x64/bin/codex"
+```
+
+#### Aura Code Runtime Manager
+
+Aura Code 后续会把 Codex 视为内置 AI runtime，而不是一套只为 Codex 写死的临时安装脚本。Runtime Manager 负责：
+
+- 在本地工作区使用本机 Codex，不启用 SSH wrapper。
+- 在 SSH 工作区检查远端 Linux runtime，不存在或版本过旧时自动安装。
+- 根据远端平台选择 `linux-x64` 或 `linux-arm64` 包。
+- 优先从官方来源下载 manifest 指定版本。
+- 官方下载失败时尝试 Aura Code 镜像或本机缓存。
+- 没有网络时上传安装包内置基础版本，例如 Codex `0.128.x`，确保核心能力可用。
+- 安装完成后生成 SSH wrapper，设置 `chatgpt.cliExecutable`，并提示 reload Codex app-server。
+
+推荐的远端目录会从现有 Codex 专用路径迁移为：
+
+```text
+~/.aura-code/
+  runtimes/
+    codex/
+      0.128.0-linux-x64/
+        bin/codex
+      current -> 0.128.0-linux-x64
+    registry.json
+```
+
+版本选择由 runtime manifest 驱动。Aura Code 安装包会带一个基础 manifest 和离线兜底包；有网络时可以按 manifest 下载官方推荐版本，无网络时仍能上传内置 Codex `0.128.x` 到远端。以后接入 Claude Code 时，只新增 Claude Code provider adapter，下载、缓存、上传、远端 registry、版本检查、wrapper/bridge 绑定都复用同一套 Runtime Manager。
+
+#### 新电脑首次使用
+
+如果一台新电脑只安装了 Aura Code 的桌面安装包，远端 AI 能力不是凭空内置在远程机器上的，而是由本机安装包、远程 server 包、OpenAI Codex 扩展和远端 AI runtime 共同组成。
+
+新电脑上需要具备这些本地能力：
+
+- Aura Code 桌面应用，内置 `our.remote-ssh`。
+- 可用的 OpenSSH 客户端，能执行 `ssh <host>` 免交互连接目标远程机。
+- OpenAI Codex VS Code 扩展，运行在本地 UI extension host。
+- 本机 Codex 登录态或 API 配置，通常位于 `~/.codex/config.toml` 和 `~/.codex/auth.json`。
+- 一个可用的 remote server release manifest / tarball 来源。
+- Aura Code 安装包内置的基础 AI runtime，至少包含 Codex `0.128.x` 的离线兜底版本。
+
+首次连接远程工作区时，Aura Code 会按下面顺序获取远端能力：
+
+1. 本机 `our.remote-ssh` 读取 release manifest，确定要安装的 server commit、tarball、sha256 和兼容性信息。
+2. 如果远端 `~/.remote-ai-server/bin/<commit>` 不存在，Aura Code 通过 `ssh` 上传并解包 remote server tarball。
+3. 远端 server 启动后，Code-OSS 进入 SSH 工作区，Explorer、终端、搜索、Git、LSP 等能力由远端 server / 远端 extension host 提供。
+4. 远端 server 包中包含 `our.ai-codex-remote-bridge`，所以命令式 Codex 能力会随 server 一起到远端。
+5. Aura Code Runtime Manager 检查远端 `~/.aura-code/runtimes` 中是否已有满足 manifest 的 Codex。
+6. 如果远端 Codex 不存在或版本过旧，Runtime Manager 先查本机缓存，再尝试官方下载，再尝试 Aura Code 镜像，最后使用安装包内置 Codex `0.128.x` 兜底。
+7. Runtime Manager 上传并解包 Codex 到远端，写入 `registry.json`，并把 `current` 指向可用版本。
+8. Aura Code 自动生成本机 SSH wrapper，并把本机 Codex 扩展的 `chatgpt.cliExecutable` 指向这个 wrapper。
+9. Codex 原生侧栏重载后，通过 wrapper 在远端工作目录启动 `codex app-server`。
+
+如果新电脑只有桌面 app，但没有配置 release manifest / tarball，Aura Code 无法知道该给远程机器安装哪一份 remote server。当前开发验证环境通过 `scripts/remote-ai-validate.sh` 写入这些设置：
+
+```json
+"remoteai.ssh.serverManifestPath": ".../remote-releases/<commit>/manifest.json",
+"remoteai.ssh.serverTarballPath": ".../remote-releases/<commit>/vscode-reh-linux-x64.tar.gz",
+"remoteai.ssh.commit": "<commit>"
+```
+
+正式分发安装包时，有两种推荐方式：
+
+- 随安装包附带 remote server manifest / tarball、runtime manifest 和 Codex `0.128.x` 离线兜底包，并在首次启动时写入上述设置。
+- 提供可访问的 release URL / manifest 服务，让 Aura Code 按 `serverDownloadUrlTemplate` 下载匹配 commit 的远程 server，并按 runtime manifest 下载匹配远端平台的 AI runtime。
+
+远端 AI 是否可用，最终取决于三件事同时成立：
+
+- 远端 server 已安装并能启动。
+- 远端 Linux Codex runtime 已安装，并能读取有效 Codex 配置或登录态。
+- 本地 Codex 扩展的 `chatgpt.cliExecutable` 已切到 Aura Code 生成的 SSH wrapper，并已重载窗口。
+
+完整 Runtime Manager 设计见 [Aura Code Runtime Manager 设计](docs/superpowers/specs/2026-05-04-aura-code-runtime-manager-design.md)。
+
+### 实现原理
+
+#### 远程连接
+
+RemoteAI SSH 注册 `ssh-remote` authority resolver。当用户打开 `vscode-remote://ssh-remote+dev/home/...` 时：
+
+1. resolver 读取本地 release manifest。
+2. 如果远端 server 缺失，就通过 SSH stdin 上传并解包 tarball。
+3. 在远端启动 `remote-ai-server`。
+4. 解析远端 server 输出的 listening marker。
+5. 建立本地 SSH tunnel。
+6. 返回 `ResolvedAuthority` 给 workbench。
+
+关键模块：
+
+- `extensions/our-remote-ssh/src/resolver.ts`
+- `extensions/our-remote-ssh/src/serverInstaller.ts`
+- `extensions/our-remote-ssh/src/serverLauncher.ts`
+- `extensions/our-remote-ssh/src/tunnelManager.ts`
+- `extensions/our-remote-ssh/src/workspaceTarget.ts`
+
+#### 远程 server 打包
+
+远程 server 包由 `build/remote-ai/packageServer.js` 生成。它会把 Code-OSS remote server、兼容来源中的 Linux native module、内置 RemoteAI 扩展和 manifest 元数据组合成：
+
+```text
+remote-releases/<commit>/vscode-reh-linux-x64.tar.gz
+remote-releases/<commit>/manifest.json
+```
+
+`build/remote-ai/releaseDoctor.js` 会校验：
+
+- tarball 是否存在。
+- sha256 和 size 是否匹配 manifest。
+- 必要的 server 文件是否存在。
+- 最低 glibc 兼容元数据是否存在。
+
+#### 远端 AI 工作流
+
+RemoteAI 里的“远端 AI”实际有两条执行链路：Codex 原生侧栏链路和 RemoteAI Codex Bridge 链路。两条链路都要求 AI 的工具执行环境在远端工作目录中，但入口和交互方式不同。
+
+##### Codex 原生侧栏链路
+
+这条链路用于右侧 Codex 面板的连续聊天体验。完整流程如下：
+
+1. 用户通过 RemoteAI SSH 打开远程工作区，例如 `ssh-remote+dev` + `/home/hejianglong/remote-ai-manual`。
+2. `our.remote-ssh` 在本地 UI extension host 中激活，检查当前 workspace URI。
+3. 如果 URI 是 `vscode-remote://ssh-remote+dev/...`，它生成一个本机 wrapper：
+
+```text
+<globalStorage>/codex-ui/remote-ai-codex-ssh-dev
+```
+
+4. `our.remote-ssh` 把本机设置 `chatgpt.cliExecutable` 更新为 wrapper 路径。
+5. 用户点击 `Reload Window`，让 OpenAI Codex 扩展重新启动自己的 `codex app-server`。
+6. OpenAI Codex 扩展仍以为自己在本机执行：
+
+```sh
+<chatgpt.cliExecutable> app-server --analytics-default-enabled
+```
+
+7. 实际执行的是 RemoteAI wrapper。wrapper 把命令转换为：
+
+```sh
+ssh dev 'cd /home/hejianglong/remote-ai-manual && exec /home/hejianglong/.remote-ai-server/codex/0.128.0-linux-x64/bin/codex --sandbox danger-full-access --dangerously-bypass-approvals-and-sandbox app-server --analytics-default-enabled'
+```
+
+8. Codex app-server 因此运行在远程 Linux 进程中，当前目录是远端工作区。
+9. Codex 面板里的 shell、文件读取、patch apply 都由这个远端 app-server 执行。
+10. 写入 `README.md` 时，实际写的是远端 `/home/hejianglong/remote-ai-manual/README.md`。
+
+这个设计的关键点是：OpenAI Codex VS Code 扩展仍留在本机 UI 里显示界面，但它启动的 Codex 后端进程被 wrapper 重定向到了远端。这样既保留原生侧栏体验，又避免本机 macOS 进程尝试访问不存在的 `/home/...` 路径。
+
+如果没有 wrapper，本机 Codex app-server 会出现典型失败：
+
+```text
+Failed to read file to update /home/.../README.md: No such file or directory
+```
+
+这不是 AI 不会写文件，而是工具进程运行在本机，无法访问远端 Linux 绝对路径。
+
+##### RemoteAI Codex Bridge 链路
+
+这条链路用于命令面板中的一次性任务，例如 `RemoteAI: Run Codex Task in Remote Workspace`。完整流程如下：
+
+1. 用户在 SSH 工作区运行 RemoteAI Codex 命令。
+2. `our.ai-codex-remote-bridge` 在 workspace extension host 中执行，因此它看到的 `workspaceFolders[0].uri.fsPath` 已经是远端路径。
+3. bridge 解析 `remoteai.codex.remoteCliPath`，找到远端 Linux Codex CLI。
+4. bridge 调用：
+
+```sh
+codex exec \
+  --cd /home/hejianglong/remote-ai-manual \
+  --sandbox danger-full-access \
+  --dangerously-bypass-approvals-and-sandbox \
+  --add-dir <remote-global-storage> \
+  --output-last-message /home/hejianglong/remote-ai-manual/.remote-ai-codex/last-message.md \
+  "<user task>"
+```
+
+5. Codex 在远程工作目录中读文件、运行命令、应用 patch。
+6. 任务结束后，最后回复写入 `.remote-ai-codex/last-message.md`，远端 `git diff` 能看到实际改动。
+
+这条链路不需要 Codex 原生侧栏，也不依赖本机 wrapper。它更适合 E2E、批处理、自动验证和明确的一次性任务。
+
+##### 为什么不用本地镜像同步
+
+曾经可选的思路是把远程目录 rsync 到本地镜像，让本机 Codex 修改镜像，再同步回远程。这个思路能完成某些批处理任务，但不适合 Codex 原生侧栏：
+
+- Codex 面板和 VS Code Explorer 展示的是远端路径，本地镜像路径不同。
+- Codex 工具报告会混淆 `/home/...` 和本机镜像目录。
+- 文件监听、Git、LSP、终端和 patch 上下文容易不一致。
+- macOS `workspace-write` sandbox 会拦截 SSH 网络访问。
+
+因此当前稳定方案是：SSH 工作区中让 AI 工具进程直接在远端运行；本地工作区中让 AI 工具进程直接在本地运行。
+
+#### Codex UI wrapper
+
+SSH wrapper 由 `extensions/our-remote-ssh/src/codexUiWrapper.ts` 生成。它只在当前 workspace 是 `vscode-remote` 且 authority 以 `ssh-remote+` 开头时启用。
+
+生成路径类似：
+
+```text
+<globalStorage>/codex-ui/remote-ai-codex-ssh-dev
+```
+
+wrapper 会安全引用 host、远程目录和远端 Codex CLI 路径，并把 Codex 原生侧栏传入的参数原样追加到远端 Codex 命令后面。这样 Codex 扩展仍以为自己启动的是一个普通 `codex` 可执行文件，但实际进程已经在远端工作目录中。
+
+当切回本地文件夹时，如果 `chatgpt.cliExecutable` 指向 RemoteAI 管理的 wrapper，RemoteAI 会把它清空，让 Codex 回到本地默认 CLI。
+
+#### 权限模型
+
+当前 Codex 远程执行默认使用最高权限：
+
+```sh
+--sandbox danger-full-access
+--dangerously-bypass-approvals-and-sandbox
+```
+
+这样可以避开 macOS `workspace-write` sandbox 对 SSH 网络访问和远程路径的限制。风险是 Codex 在远程机器上拥有完整 shell 能力，因此应只用于可信远程主机和可信工作区。
+
+### 常用命令
+
+准备验证环境：
+
+```sh
+PATH="/usr/local/opt/node@22/bin:$PATH" scripts/remote-ai-validate.sh --prepare-only
+```
+
+启动验证窗口：
+
+```sh
+PATH="/usr/local/opt/node@22/bin:$PATH" scripts/remote-ai-validate.sh
+```
+
+完整 release gate：
+
+```sh
+env -u ELECTRON_RUN_AS_NODE \
+  REMOTE_AI_RELEASE_CHECK_E2E=1 \
+  PATH="/usr/local/opt/node@22/bin:$PATH" \
+  scripts/remote-ai-release-check.sh
+```
+
+打包远程 server：
+
+```sh
+node build/remote-ai/packageServer.js \
+  --source ../vscode-reh-linux-x64 \
+  --commit <commit> \
+  --release-dir remote-releases/<commit> \
+  --compat-server-source ../remote-server/extracted/vscode-reh-linux-x64 \
+  --min-glibc 2.17 \
+  --include-extension extensions/ai-codex-remote-bridge
+```
+
+校验包：
+
+```sh
+node build/remote-ai/releaseDoctor.js remote-releases/<commit>/manifest.json
+```
+
+更详细的手工验收步骤见 [RemoteAI Validation Steps](docs/remote-ai-validation-steps.md)。
+
+### 当前边界
+
+- 纯本机 Codex 原生侧栏不能直接写远程 Linux 绝对路径。它必须通过 SSH wrapper 驱动远端 Codex，或者使用 RemoteAI Codex Bridge 的单次任务入口。
+- SSH wrapper 变更后必须重载窗口，才能让已经启动的 Codex app-server 重新启动。
+- 远端 Codex 依赖 `ssh <host>` 免交互可用。
+- 远端 Codex CLI 需要 Linux 包，macOS 本机 Codex 二进制不能直接放到远端运行。
+- 当前默认是 full access，适合开发验证和可信环境，不适合不可信代码仓库。
+
 ## The Repository
 
 This repository ("`Code - OSS`") is where we (Microsoft) develop the [Visual Studio Code](https://code.visualstudio.com) product together with the community. Not only do we work on code and issues here, we also publish our [roadmap](https://github.com/microsoft/vscode/wiki/Roadmap), [monthly iteration plans](https://github.com/microsoft/vscode/wiki/Iteration-Plans), and our [endgame plans](https://github.com/microsoft/vscode/wiki/Running-the-Endgame). This source code is available to everyone under the standard [MIT license](https://github.com/microsoft/vscode/blob/main/LICENSE.txt).
