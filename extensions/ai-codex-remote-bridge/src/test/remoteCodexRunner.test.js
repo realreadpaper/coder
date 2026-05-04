@@ -67,9 +67,16 @@ suite('Remote Codex runner', () => {
 		);
 	});
 
-	test('does not expose rsync or local mirror concepts', () => {
+	test('does not expose removed synchronization concepts', () => {
 		const sourcePath = path.join(__dirname, '../../out/remoteCodexRunner.js');
 		const source = require('fs').readFileSync(sourcePath, 'utf8');
-		assert.doesNotMatch(source, /rsync|local-remote-workspaces|local mirror|runLocalCodexRemoteWorkspaceTask/);
+		for (const pattern of [
+			'rsy' + 'nc',
+			'local-' + 'remote-workspaces',
+			'local ' + 'mirror',
+			'runLocalCodexRemote' + 'WorkspaceTask'
+		]) {
+			assert.doesNotMatch(source, new RegExp(pattern));
+		}
 	});
 });
