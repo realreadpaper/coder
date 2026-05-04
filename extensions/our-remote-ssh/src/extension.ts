@@ -15,6 +15,11 @@ import { selectTarballFromManifest, RemoteAiReleaseManifest } from './releaseMan
 import { resolveSshRemoteAuthority, ResolvedSshRemote } from './resolver';
 import { parseSshConfig } from './sshConfig';
 import { sshExec } from './sshProcess';
+import { createCodexSshWrapperPlan, isManagedCodexSshWrapper } from './codexUiWrapper';
+import { isSameRemoteWorkspace, normalizeRemotePath } from './workspaceTarget';
+import { defaultAuraRuntimeManifest } from './auraRuntimeManifest';
+import { buildAuraRuntimeProbeScript, parseAuraRuntimeProbeOutput } from './auraRuntimeInstaller';
+import { createAuraRuntimeEnsurePlan } from './auraRuntimeBinding';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -35,7 +40,12 @@ export function activate(context: vscode.ExtensionContext): void {
 		metadata: { extension: 'our.remote-ssh' }
 	});
 
-	const openRemoteFolder = async (host: string, remotePath: string) => {
+	void configureCodexUiForWorkspace(context, output, auditLog);
+	context.subscriptions.push(vscode.workspace.onDidChangeWorkspaceFolders(() => {
+		void configureCodexUiForWorkspace(context, output, auditLog);
+	}));
+
+	const openRemoteFolder = async (host: string, remotePath: string): Promise<'already-connected' | 'opened'> => {
 		const authority = toSshRemoteAuthority(host);
 		await auditLog.record({
 			operation: 'remote.openFolder.request',
@@ -43,11 +53,29 @@ export function activate(context: vscode.ExtensionContext): void {
 			authority,
 			workspaceRoot: remotePath
 		});
+		if (isSameRemoteWorkspace(vscode.workspace.workspaceFolders, host, remotePath)) {
+			await auditLog.record({
+				operation: 'remote.openFolder.request',
+				status: 'succeeded',
+				authority,
+				workspaceRoot: remotePath,
+				metadata: { result: 'already-connected' }
+			});
+			return 'already-connected';
+		}
 		await vscode.commands.executeCommand('vscode.openFolder', vscode.Uri.from({
 			scheme: 'vscode-remote',
 			authority,
 			path: normalizeRemotePath(remotePath)
 		}), false);
+		await auditLog.record({
+			operation: 'remote.openFolder.request',
+			status: 'succeeded',
+			authority,
+			workspaceRoot: remotePath,
+			metadata: { result: 'open-folder-dispatched' }
+		});
+		return 'opened';
 	};
 
 	const connectCommand = async () => {
@@ -149,10 +177,106 @@ function getSshConfiguration(): vscode.WorkspaceConfiguration {
 	return vscode.workspace.getConfiguration('remoteai.ssh');
 }
 
+async function configureCodexUiForWorkspace(
+	context: vscode.ExtensionContext,
+	output: vscode.OutputChannel,
+	auditLog: AuditLogWriter
+): Promise<void> {
+	const folder = vscode.workspace.workspaceFolders?.[0];
+	const codexConfiguration = vscode.workspace.getConfiguration('remoteai.codex');
+	const sandboxMode = codexConfiguration.get<'read-only' | 'workspace-write' | 'danger-full-access'>('sandboxMode') || 'danger-full-access';
+	let plan = createCodexSshWrapperPlan({
+		globalStoragePath: context.globalStorageUri.fsPath,
+		workspaceFolderUri: folder?.uri,
+		remoteCliPath: codexConfiguration.get<string>('remoteCliPath') || '',
+		sandboxMode
+	});
+	const chatgptConfiguration = vscode.workspace.getConfiguration('chatgpt');
+	const currentCliExecutable = chatgptConfiguration.get<string>('cliExecutable') || '';
+
+	if (!plan) {
+		if (isManagedCodexSshWrapper(currentCliExecutable)) {
+			await chatgptConfiguration.update('cliExecutable', undefined, vscode.ConfigurationTarget.Global);
+			output.appendLine('Restored Codex sidebar CLI to the local default for this local workspace.');
+			await auditLog.record({
+				operation: 'codex.ui.configure',
+				status: 'succeeded',
+				metadata: { mode: 'local' }
+			});
+		}
+		return;
+	}
+
+	const sshPath = getSshConfiguration().get<string>('sshPath') || 'ssh';
+	try {
+		const probeResult = await sshExec(plan.host, buildAuraRuntimeProbeScript(), { sshPath });
+		if (probeResult.code !== 0) {
+			throw new Error(`Aura runtime probe failed\nstdout:\n${probeResult.stdout}\nstderr:\n${probeResult.stderr}`);
+		}
+		const probe = parseAuraRuntimeProbeOutput(probeResult.stdout);
+		const ensurePlan = createAuraRuntimeEnsurePlan({
+			providerId: 'codex',
+			home: probe.home,
+			platformKey: probe.platformKey,
+			configuredRemoteCliPath: codexConfiguration.get<string>('remoteCliPath') || '',
+			registry: probe.registry,
+			requiredVersion: defaultAuraRuntimeManifest.providers.codex.recommendedVersion
+		});
+		const remoteCliPath = ensurePlan.action === 'install' ? ensurePlan.target.binPath : ensurePlan.binPath;
+		plan = createCodexSshWrapperPlan({
+			globalStoragePath: context.globalStorageUri.fsPath,
+			workspaceFolderUri: folder?.uri,
+			remoteCliPath,
+			sandboxMode
+		}) ?? plan;
+		output.appendLine(`Aura Code selected Codex runtime: ${remoteCliPath}`);
+		await auditLog.record({
+			operation: 'aura.runtime.bind',
+			status: 'succeeded',
+			authority: `ssh-remote+${encodeURIComponent(plan.host)}`,
+			workspaceRoot: plan.remotePath,
+			metadata: { action: ensurePlan.action, remoteCliPath, platformKey: probe.platformKey }
+		});
+	} catch (error) {
+		const message = error instanceof Error ? error.message : String(error);
+		output.appendLine(`Aura Code runtime binding failed: ${message}`);
+		await auditLog.record({
+			operation: 'aura.runtime.bind',
+			status: 'failed',
+			authority: `ssh-remote+${encodeURIComponent(plan.host)}`,
+			workspaceRoot: plan.remotePath,
+			metadata: { error: message }
+		});
+	}
+
+	await fs.promises.mkdir(path.dirname(plan.wrapperPath), { recursive: true });
+	await fs.promises.writeFile(plan.wrapperPath, plan.script, { mode: 0o755 });
+	await fs.promises.chmod(plan.wrapperPath, 0o755);
+	if (currentCliExecutable !== plan.wrapperPath) {
+		await chatgptConfiguration.update('cliExecutable', plan.wrapperPath, vscode.ConfigurationTarget.Global);
+		output.appendLine(`Configured Codex sidebar for ${plan.host}:${plan.remotePath}`);
+		output.appendLine(`Codex UI wrapper: ${plan.wrapperPath}`);
+		await auditLog.record({
+			operation: 'codex.ui.configure',
+			status: 'succeeded',
+			authority: `ssh-remote+${encodeURIComponent(plan.host)}`,
+			workspaceRoot: plan.remotePath,
+			metadata: { wrapperPath: plan.wrapperPath, remoteCliPath: plan.remoteCliPath }
+		});
+		const action = await vscode.window.showInformationMessage(
+			'RemoteAI configured the Codex sidebar for this SSH workspace. Reload the window to restart the Codex app-server in the remote workspace.',
+			'Reload Window'
+		);
+		if (action === 'Reload Window') {
+			await vscode.commands.executeCommand('workbench.action.reloadWindow');
+		}
+	}
+}
+
 function openDashboard(
 	context: vscode.ExtensionContext,
 	auditLog: AuditLogWriter,
-	openRemoteFolder: (host: string, remotePath: string) => Promise<void>
+	openRemoteFolder: (host: string, remotePath: string) => Promise<'already-connected' | 'opened'>
 ): void {
 	const panel = vscode.window.createWebviewPanel(
 		'remoteAiSshDashboard',
@@ -201,7 +325,17 @@ function openDashboard(
 			));
 			await panel.webview.postMessage({ type: 'status', status: 'Connecting', message: `${host}:${remotePath}` });
 			try {
-				await openRemoteFolder(host, remotePath);
+				const result = await openRemoteFolder(host, remotePath);
+				await auditLog.record({
+					operation: 'dashboard.connect.request',
+					status: 'succeeded',
+					authority: toSshRemoteAuthority(host),
+					workspaceRoot: remotePath,
+					metadata: { result }
+				});
+				if (result === 'already-connected') {
+					await panel.webview.postMessage({ type: 'status', status: 'Connected', message: `Already connected to ${host}:${remotePath}` });
+				}
 			} catch (error) {
 				const text = error instanceof Error ? error.message : String(error);
 				await auditLog.record({
@@ -387,11 +521,4 @@ function createNonce(): string {
 		value += alphabet[Math.floor(Math.random() * alphabet.length)];
 	}
 	return value;
-}
-
-function normalizeRemotePath(remotePath: string): string {
-	if (remotePath === '~') {
-		return '/';
-	}
-	return remotePath.startsWith('/') ? remotePath : `/${remotePath}`;
 }

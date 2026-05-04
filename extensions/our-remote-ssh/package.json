@@ -12,6 +12,7 @@
 		"ui"
 	],
 	"activationEvents": [
+		"onStartupFinished",
 		"onResolveRemoteAuthority:ssh-remote",
 		"onCommand:opensshremotes.openEmptyWindowInCurrentWindow",
 		"onCommand:remoteai.ssh.connectToHost",
@@ -78,6 +79,21 @@
 					"type": "string",
 					"default": "~",
 					"description": "Default remote folder path shown by the connect command."
+				},
+				"aura.runtime.manifestPath": {
+					"type": "string",
+					"default": "",
+					"description": "Local Aura Code runtime manifest path. Leave empty to use the bundled manifest."
+				},
+				"aura.runtime.bundledRoot": {
+					"type": "string",
+					"default": "",
+					"description": "Local directory containing bundled Aura Code runtime tarballs. Leave empty to use the application resource directory."
+				},
+				"aura.runtime.networkEnabled": {
+					"type": "boolean",
+					"default": true,
+					"description": "Allow Aura Code to download AI runtimes when local cache and bundled runtime packages are missing."
 				}
 			}
 		},
