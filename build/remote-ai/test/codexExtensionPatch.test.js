@@ -5,6 +5,8 @@
 
 const assert = require('assert');
 const {
+	AURA_CODEX_ICON_RELATIVE_PATH,
+	patchCodexActivityBarIcon,
 	patchCodexPrimarySidebarFallback,
 	patchCodexRemoteWorkspaceCwd,
 	patchCodexSecondarySidebarGate
@@ -40,6 +42,24 @@ suite('Codex extension patch', () => {
 
 		assert.strictEqual(result.patched, true);
 		assert.strictEqual(pkg.contributes.viewsContainers.activitybar[0].when, 'chatgpt.forcePrimarySidebarDisabled');
+	});
+
+	test('rebrands Codex activity bar containers with the Aura icon', () => {
+		const pkg = {
+			icon: 'resources/blossom.dark.png',
+			contributes: {
+				viewsContainers: {
+					activitybar: [{ id: 'codexViewContainer', icon: 'resources/blossom-white.svg' }],
+					secondarySidebar: [{ id: 'codexSecondaryViewContainer', icon: 'resources/blossom-white.svg' }]
+				}
+			}
+		};
+		const result = patchCodexActivityBarIcon(pkg);
+
+		assert.strictEqual(result.patched, true);
+		assert.strictEqual(pkg.contributes.viewsContainers.activitybar[0].icon, AURA_CODEX_ICON_RELATIVE_PATH);
+		assert.strictEqual(pkg.contributes.viewsContainers.secondarySidebar[0].icon, AURA_CODEX_ICON_RELATIVE_PATH);
+		assert.strictEqual(pkg.icon, 'resources/blossom.dark.png');
 	});
 
 	test('forces app-server request cwd to the active SSH workspace', () => {

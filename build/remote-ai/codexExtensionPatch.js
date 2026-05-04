@@ -11,6 +11,8 @@ const CODEX_PRIMARY_SIDEBAR_DISABLED_CONTEXT = 'chatgpt.forcePrimarySidebarDisab
 const VERSION_GATE_PATTERN = /L0=\{major:1,minor:(\d+)\}/;
 const JSON_RPC_WRITE_PATTERNS = ['JSON.stringify(e)+`\n`', 'JSON.stringify(e)+`\\n`'];
 const REMOTE_WORKSPACE_CWD_MARKER = 'remoteAiWorkspaceCwd';
+const AURA_CODEX_ICON_RELATIVE_PATH = 'resources/aura-codex.svg';
+const AURA_CODEX_ICON_SOURCE_PATH = path.join(__dirname, 'assets', 'aura-codex.svg');
 
 function patchCodexSecondarySidebarGate(source, supportedMinor = 105) {
 	if (!source.includes(CODEX_SECONDARY_SIDEBAR_CONTEXT) || !VERSION_GATE_PATTERN.test(source)) {
@@ -79,15 +81,45 @@ function patchCodexPrimarySidebarFallback(pkg) {
 	return { patched };
 }
 
+function patchCodexActivityBarIcon(pkg) {
+	const containers = [
+		...(pkg.contributes?.viewsContainers?.activitybar ?? []),
+		...(pkg.contributes?.viewsContainers?.secondarySidebar ?? [])
+	];
+	let patched = false;
+	for (const container of containers) {
+		if ((container?.id === 'codexViewContainer' || container?.id === 'codexSecondaryViewContainer')
+			&& container.icon !== AURA_CODEX_ICON_RELATIVE_PATH) {
+			container.icon = AURA_CODEX_ICON_RELATIVE_PATH;
+			patched = true;
+		}
+	}
+	return { patched };
+}
+
+function writeAuraCodexIcon(extensionDir) {
+	const targetPath = path.join(extensionDir, AURA_CODEX_ICON_RELATIVE_PATH);
+	const source = fs.readFileSync(AURA_CODEX_ICON_SOURCE_PATH, 'utf8');
+	if (fs.existsSync(targetPath) && fs.readFileSync(targetPath, 'utf8') === source) {
+		return false;
+	}
+	fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+	fs.writeFileSync(targetPath, source);
+	return true;
+}
+
 function patchCodexExtensionDir(extensionDir, supportedMinor = 105) {
 	const extensionJsPath = path.join(extensionDir, 'out', 'extension.js');
 	const packagePath = path.join(extensionDir, 'package.json');
 	let packagePatched = false;
+	let iconPatched = false;
 	if (fs.existsSync(packagePath)) {
 		const packageSource = fs.readFileSync(packagePath, 'utf8');
 		const pkg = JSON.parse(packageSource);
 		const packagePatch = patchCodexPrimarySidebarFallback(pkg);
-		if (packagePatch.patched) {
+		const iconPatch = patchCodexActivityBarIcon(pkg);
+		iconPatched = writeAuraCodexIcon(extensionDir);
+		if (packagePatch.patched || iconPatch.patched) {
 			const backupPath = `${packagePath}.remote-ai.bak`;
 			if (!fs.existsSync(backupPath)) {
 				fs.writeFileSync(backupPath, packageSource);
@@ -98,14 +130,14 @@ function patchCodexExtensionDir(extensionDir, supportedMinor = 105) {
 	}
 
 	if (!fs.existsSync(extensionJsPath)) {
-		return { extensionDir, patched: packagePatched, packagePatched, reason: 'missing extension.js' };
+		return { extensionDir, patched: packagePatched || iconPatched, packagePatched, iconPatched, reason: 'missing extension.js' };
 	}
 
 	const source = fs.readFileSync(extensionJsPath, 'utf8');
 	const gatePatch = patchCodexSecondarySidebarGate(source, supportedMinor);
 	const cwdPatch = patchCodexRemoteWorkspaceCwd(gatePatch.source);
 	if (!gatePatch.patched && !cwdPatch.patched) {
-		return { extensionDir, patched: packagePatched, packagePatched, reason: 'already patched or unsupported bundle' };
+		return { extensionDir, patched: packagePatched || iconPatched, packagePatched, iconPatched, reason: 'already patched or unsupported bundle' };
 	}
 
 	const backupPath = `${extensionJsPath}.remote-ai.bak`;
@@ -113,7 +145,7 @@ function patchCodexExtensionDir(extensionDir, supportedMinor = 105) {
 		fs.writeFileSync(backupPath, source);
 	}
 	fs.writeFileSync(extensionJsPath, cwdPatch.source);
-	return { extensionDir, patched: true, packagePatched, gatePatched: gatePatch.patched, cwdPatched: cwdPatch.patched, backupPath };
+	return { extensionDir, patched: true, packagePatched, iconPatched, gatePatched: gatePatch.patched, cwdPatched: cwdPatch.patched, backupPath };
 }
 
 if (require.main === module) {
@@ -133,7 +165,9 @@ if (require.main === module) {
 }
 
 module.exports = {
+	AURA_CODEX_ICON_RELATIVE_PATH,
 	findCodexExtensionDirs,
+	patchCodexActivityBarIcon,
 	patchCodexExtensionDir,
 	patchCodexPrimarySidebarFallback,
 	patchCodexRemoteWorkspaceCwd,
