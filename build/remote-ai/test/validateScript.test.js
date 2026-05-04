@@ -32,6 +32,17 @@ suite('RemoteAI validation launcher', () => {
 		assert.match(script, /REMOTE_AI_VALIDATE_REMOTE_CODEX_CLI/);
 		assert.match(script, /remoteai\.codex\.remoteCliPath/);
 		assert.match(script, /chatgpt\.cliExecutable/);
+		assert.match(script, /remote-ai-codex-ssh/);
+		assert.match(script, /'chatgpt\.cliExecutable':\s*codexUiWrapperPath/);
 		assert.doesNotMatch(script, /remoteai\.codex\.executionMode/);
+	});
+
+	test('validate script configures Aura runtime fallback paths', () => {
+		const script = fs.readFileSync(path.join(__dirname, '../../../scripts/remote-ai-validate.sh'), 'utf8');
+
+		assert.match(script, /aura\.runtime\.bundledRoot/);
+		assert.match(script, /aura\.runtime\.networkEnabled/);
+		assert.match(script, /aura\.runtime\.manifestPath/);
+		assert.match(script, /0\.128\.0/);
 	});
 });

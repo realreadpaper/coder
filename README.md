@@ -346,6 +346,8 @@ env -u ELECTRON_RUN_AS_NODE \
   scripts/remote-ai-release-check.sh
 ```
 
+验证 Aura Code 离线兜底时，将 `aura.runtime.networkEnabled` 设置为 `false`，并确认 `resources/aura-code/runtimes/codex/0.128.0-linux-x64.tar.gz` 存在。
+
 打包远程 server：
 
 ```sh

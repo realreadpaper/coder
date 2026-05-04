@@ -21,6 +21,11 @@ step() {
 step "release doctor"
 node build/remote-ai/releaseDoctor.js "$MANIFEST_PATH"
 
+if [[ ! -f "$ROOT/resources/aura-code/runtime-manifest.json" ]]; then
+	echo "missing Aura runtime manifest: resources/aura-code/runtime-manifest.json" >&2
+	exit 1
+fi
+
 if [[ "$RUN_COMPILE" == "1" ]]; then
 	step "compile"
 	npm run compile

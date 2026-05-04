@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "providers": {
+    "codex": {
+      "displayName": "Codex",
+      "recommendedVersion": "0.128.0",
+      "minimumVersion": "0.128.0",
+      "bundledFallbackVersion": "0.128.0",
+      "commands": {
+        "sidebar": "app-server",
+        "exec": "exec"
+      },
+      "platforms": {
+        "linux-x64": {
+          "version": "0.128.0",
+          "officialUrl": "",
+          "mirrorUrl": "",
+          "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+          "size": 0,
+          "binPath": "bin/codex",
+          "bundledPath": "runtimes/codex/0.128.0-linux-x64.tar.gz"
+        },
+        "linux-arm64": {
+          "version": "0.128.0",
+          "officialUrl": "",
+          "mirrorUrl": "",
+          "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+          "size": 0,
+          "binPath": "bin/codex",
+          "bundledPath": "runtimes/codex/0.128.0-linux-arm64.tar.gz"
+        }
+      }
+    }
+  }
+}

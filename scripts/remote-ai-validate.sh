@@ -17,6 +17,7 @@ LOGS_DIR="${REMOTE_AI_VALIDATE_LOGS_DIR:-/tmp/remote-ai-validate-logs}"
 CODEX_EXTENSIONS_DIR="${REMOTE_AI_VALIDATE_EXTENSIONS_DIR:-$HOME/.vscode/extensions}"
 LOCAL_CODEX_CLI="${REMOTE_AI_VALIDATE_CODEX_CLI:-$(command -v codex || true)}"
 REMOTE_CODEX_CLI="${REMOTE_AI_VALIDATE_REMOTE_CODEX_CLI:-}"
+AURA_RUNTIME_FALLBACK_VERSION="${AURA_RUNTIME_FALLBACK_VERSION:-0.128.0}"
 RELEASE_DIR="$ROOT/remote-releases/$COMMIT"
 MANIFEST_PATH="$RELEASE_DIR/manifest.json"
 TARBALL_PATH="$RELEASE_DIR/vscode-reh-linux-x64.tar.gz"
@@ -35,7 +36,7 @@ REMOTE_AI_VALIDATE_USER_DATA_DIR     Local user data dir, default: /tmp/remote-a
 REMOTE_AI_VALIDATE_LOGS_DIR          Local logs dir, default: /tmp/remote-ai-validate-logs
 REMOTE_AI_VALIDATE_COMMIT            RemoteAI server commit id, default: dev-compat
 REMOTE_AI_VALIDATE_EXTENSIONS_DIR    Local extensions dir, default: ~/.vscode/extensions
-REMOTE_AI_VALIDATE_CODEX_CLI         Local Codex CLI for the OpenAI UI extension, default: PATH codex
+REMOTE_AI_VALIDATE_CODEX_CLI         Local Codex CLI path retained for local fallback checks, default: PATH codex
 REMOTE_AI_VALIDATE_REMOTE_CODEX_CLI  Remote Linux Codex CLI path. Empty prepares one on the SSH host
 EOF
 }
@@ -92,12 +93,33 @@ if [[ -z "$REMOTE_CODEX_CLI" ]]; then
 fi
 
 mkdir -p "$USER_DATA_DIR/User" "$LOGS_DIR"
-node - "$ROOT" "$USER_DATA_DIR" "$MANIFEST_PATH" "$TARBALL_PATH" "$COMMIT" "$REMOTE_PATH" "$LOCAL_CODEX_CLI" "$REMOTE_CODEX_CLI" <<'NODE'
+node - "$ROOT" "$USER_DATA_DIR" "$MANIFEST_PATH" "$TARBALL_PATH" "$COMMIT" "$HOST" "$REMOTE_PATH" "$LOCAL_CODEX_CLI" "$REMOTE_CODEX_CLI" <<'NODE'
 const fs = require('fs');
 const path = require('path');
 
-const [, , root, userDataDir, manifestPath, tarballPath, commit, remotePath, localCodexCli, remoteCodexCli] = process.argv;
+const [, , root, userDataDir, manifestPath, tarballPath, commit, host, remotePath, localCodexCli, remoteCodexCli] = process.argv;
 const settingsPath = path.join(userDataDir, 'User', 'settings.json');
+const safeHost = host.replace(/[^a-zA-Z0-9._-]/g, '_');
+const codexUiWrapperPath = path.join(userDataDir, `remote-ai-codex-ssh-${safeHost}`);
+
+const wrapper = `#!/usr/bin/env bash
+set -euo pipefail
+
+HOST=${shellSingleQuote(host)}
+REMOTE_PATH=${shellSingleQuote(remotePath)}
+REMOTE_CODEX_CLI=${shellSingleQuote(remoteCodexCli)}
+
+quote() { printf '%q' "$1"; }
+
+cmd="cd $(quote "$REMOTE_PATH") && exec $(quote "$REMOTE_CODEX_CLI") --sandbox danger-full-access --dangerously-bypass-approvals-and-sandbox"
+for arg in "$@"; do
+	cmd+=" $(quote "$arg")"
+done
+
+exec ssh "$HOST" "$cmd"
+`;
+fs.writeFileSync(codexUiWrapperPath, wrapper, { mode: 0o755 });
+
 const settings = {
 	'remoteai.ssh.serverManifestPath': manifestPath,
 	'remoteai.ssh.serverTarballPath': tarballPath,
@@ -110,7 +132,11 @@ const settings = {
 	},
 	'remoteai.codex.remoteCliPath': remoteCodexCli,
 	'remoteai.codex.sandboxMode': 'danger-full-access',
+	'aura.runtime.bundledRoot': path.join(root, 'resources', 'aura-code'),
+	'aura.runtime.networkEnabled': true,
+	'aura.runtime.manifestPath': path.join(root, 'resources', 'aura-code', 'runtime-manifest.json'),
 	'chatgpt.useExperimentalLspMcpServer': true,
+	'chatgpt.cliExecutable': codexUiWrapperPath,
 	'terminal.integrated.defaultProfile.linux': 'bash',
 	'terminal.integrated.profiles.linux': {
 		bash: {
@@ -118,11 +144,12 @@ const settings = {
 		}
 	}
 };
-if (localCodexCli) {
-	settings['chatgpt.cliExecutable'] = localCodexCli;
-}
 fs.mkdirSync(path.dirname(settingsPath), { recursive: true });
 fs.writeFileSync(settingsPath, `${JSON.stringify(settings, null, 2)}\n`);
+
+function shellSingleQuote(value) {
+	return `'${String(value).replace(/'/g, `'\\''`)}'`;
+}
 NODE
 
 if [[ "$PREPARE_REMOTE" == "1" ]]; then
@@ -133,7 +160,7 @@ echo "[remote-ai] user-data: $USER_DATA_DIR"
 echo "[remote-ai] logs:      $LOGS_DIR"
 echo "[remote-ai] host:      $HOST"
 echo "[remote-ai] path:      $REMOTE_PATH"
-echo "[remote-ai] codex UI:  ${LOCAL_CODEX_CLI:-codex}"
+echo "[remote-ai] codex UI:  $USER_DATA_DIR/remote-ai-codex-ssh-${HOST//[^a-zA-Z0-9._-]/_}"
 echo "[remote-ai] codex SSH: $REMOTE_CODEX_CLI"
 
 if [[ "$PREPARE_ONLY" == "1" ]]; then
