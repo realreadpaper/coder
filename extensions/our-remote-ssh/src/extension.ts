@@ -310,7 +310,7 @@ async function configureCodexUiForWorkspaceUri(
 		updateCodexRuntimeStatus(codexRuntimeStatus, { kind: 'localDisabled' });
 		if (isManagedCodexSshWrapper(currentCliExecutable)) {
 			try {
-				await chatgptConfiguration.update('cliExecutable', undefined, vscode.ConfigurationTarget.Global);
+				await setChatGptCliExecutable(context, chatgptConfiguration, undefined);
 			} catch (error) {
 				output.appendLine(`Unable to clear Codex sidebar CLI setting: ${error instanceof Error ? error.message : String(error)}`);
 				return;
@@ -471,7 +471,7 @@ async function configureCodexUiForWorkspaceUri(
 	await fs.promises.chmod(plan.wrapperPath, 0o755);
 	if (currentCliExecutable !== plan.wrapperPath) {
 		try {
-			await chatgptConfiguration.update('cliExecutable', plan.wrapperPath, vscode.ConfigurationTarget.Global);
+			await setChatGptCliExecutable(context, chatgptConfiguration, plan.wrapperPath);
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
 			output.appendLine(`Unable to configure Codex sidebar CLI setting: ${message}`);
@@ -496,6 +496,99 @@ async function configureCodexUiForWorkspaceUri(
 		});
 		output.appendLine('Aura configured the Codex sidebar for this SSH workspace before Codex starts.');
 	}
+}
+
+async function setChatGptCliExecutable(
+	context: vscode.ExtensionContext,
+	configuration: vscode.WorkspaceConfiguration,
+	value: string | undefined
+): Promise<void> {
+	try {
+		await configuration.update('cliExecutable', value, vscode.ConfigurationTarget.Global);
+		return;
+	} catch (error) {
+		try {
+			await writeChatGptCliExecutableFallback(context, value);
+			return;
+		} catch (fallbackError) {
+			const primaryMessage = error instanceof Error ? error.message : String(error);
+			const fallbackMessage = fallbackError instanceof Error ? fallbackError.message : String(fallbackError);
+			throw new Error(`${primaryMessage}; settings.json fallback failed: ${fallbackMessage}`);
+		}
+	}
+}
+
+async function writeChatGptCliExecutableFallback(context: vscode.ExtensionContext, value: string | undefined): Promise<void> {
+	const settingsPath = path.resolve(context.globalStorageUri.fsPath, '..', '..', 'settings.json');
+	let settings: Record<string, unknown> = {};
+	try {
+		const content = await fs.promises.readFile(settingsPath, 'utf8');
+		settings = parseJsonObjectWithComments(content);
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+			throw error;
+		}
+	}
+	if (value === undefined) {
+		delete settings['chatgpt.cliExecutable'];
+	} else {
+		settings['chatgpt.cliExecutable'] = value;
+	}
+	await fs.promises.mkdir(path.dirname(settingsPath), { recursive: true });
+	await fs.promises.writeFile(settingsPath, `${JSON.stringify(settings, null, '\t')}\n`, 'utf8');
+}
+
+function parseJsonObjectWithComments(content: string): Record<string, unknown> {
+	const parsed = JSON.parse(stripJsonComments(content)) as unknown;
+	if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+		return {};
+	}
+	return parsed as Record<string, unknown>;
+}
+
+function stripJsonComments(content: string): string {
+	let result = '';
+	let inString = false;
+	let quote = '';
+	let escaped = false;
+	for (let index = 0; index < content.length; index++) {
+		const char = content[index];
+		const next = content[index + 1];
+		if (inString) {
+			result += char;
+			if (escaped) {
+				escaped = false;
+			} else if (char === '\\') {
+				escaped = true;
+			} else if (char === quote) {
+				inString = false;
+			}
+			continue;
+		}
+		if (char === '"' || char === '\'') {
+			inString = true;
+			quote = char;
+			result += char;
+			continue;
+		}
+		if (char === '/' && next === '/') {
+			while (index < content.length && content[index] !== '\n') {
+				index++;
+			}
+			result += '\n';
+			continue;
+		}
+		if (char === '/' && next === '*') {
+			index += 2;
+			while (index < content.length && !(content[index] === '*' && content[index + 1] === '/')) {
+				index++;
+			}
+			index++;
+			continue;
+		}
+		result += char;
+	}
+	return result.replace(/,\s*([}\]])/g, '$1');
 }
 
 async function resolveAuraRuntimeManifest(configuration: vscode.WorkspaceConfiguration): Promise<AuraRuntimeManifest> {

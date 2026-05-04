@@ -62,4 +62,13 @@ suite('Aura Codex UI automation', () => {
 		assert.ok(extensionSource.includes('Aura Codex: remote unavailable'));
 		assert.ok(extensionSource.includes('Remote Codex CLI'));
 	});
+
+	test('falls back to direct settings write when Codex CLI setting is not registered yet', () => {
+		const extensionSource = fs.readFileSync(path.join(__dirname, '..', 'extension.ts'), 'utf8');
+
+		assert.ok(extensionSource.includes('setChatGptCliExecutable'));
+		assert.ok(extensionSource.includes('writeChatGptCliExecutableFallback'));
+		assert.ok(extensionSource.includes('chatgpt.cliExecutable'));
+		assert.ok(extensionSource.includes('settings.json'));
+	});
 });

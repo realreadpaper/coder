@@ -58,7 +58,17 @@ echo "aura-runtime-os=$os"
 echo "aura-runtime-arch=$arch"
 if [ -f "$registry_path" ]; then
 	printf 'aura-runtime-registry='
-	cat "$registry_path"
+	python_bin=""
+	if command -v python3 >/dev/null 2>&1; then
+		python_bin=python3
+	elif command -v python >/dev/null 2>&1; then
+		python_bin=python
+	fi
+	if [ -n "$python_bin" ] && "$python_bin" -c 'import json,sys; print(json.dumps(json.load(open(sys.argv[1])), separators=(",",":")))' "$registry_path"; then
+		:
+	else
+		tr -d '\\r\\n' < "$registry_path" || printf '{"runtimes":{}}'
+	fi
 	printf '\\n'
 else
 	echo 'aura-runtime-registry={"runtimes":{}}'
@@ -68,11 +78,22 @@ fi
 
 export function parseAuraRuntimeProbeOutput(output: string): AuraRuntimeRemoteProbe {
 	const values = new Map<string, string>();
-	for (const line of output.split(/\r?\n/)) {
-		const index = line.indexOf('=');
-		if (index > 0) {
-			values.set(line.slice(0, index), line.slice(index + 1));
+	const lines = output.split(/\r?\n/);
+	for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+		const line = lines[lineIndex];
+		const separatorIndex = line.indexOf('=');
+		if (separatorIndex <= 0) {
+			continue;
 		}
+		const key = line.slice(0, separatorIndex);
+		let value = line.slice(separatorIndex + 1);
+		if (key === 'aura-runtime-registry') {
+			while (!isJsonComplete(value) && lineIndex + 1 < lines.length) {
+				lineIndex++;
+				value += `\n${lines[lineIndex]}`;
+			}
+		}
+		values.set(key, value);
 	}
 	const home = required(values, 'aura-runtime-home');
 	const os = required(values, 'aura-runtime-os');
@@ -217,6 +238,15 @@ function required(values: Map<string, string>, key: string): string {
 		throw new Error(`Missing ${key} in Aura runtime probe output`);
 	}
 	return value;
+}
+
+function isJsonComplete(value: string): boolean {
+	try {
+		JSON.parse(value);
+		return true;
+	} catch {
+		return false;
+	}
 }
 
 function shellQuote(value: string): string {

@@ -25,11 +25,30 @@ suite('Aura runtime installer scripts', () => {
 		assert.strictEqual(probe.registry.runtimes.codex.version, '0.128.0');
 	});
 
+	test('parses pretty printed remote registry output', () => {
+		const probe = parseAuraRuntimeProbeOutput([
+			'bash: warning: setlocale: LC_ALL: cannot change locale (C.UTF-8)',
+			'aura-runtime-home=/home/user',
+			'aura-runtime-os=linux',
+			'aura-runtime-arch=x64',
+			'aura-runtime-registry={',
+			'  "runtimes": {',
+			'    "codex": {',
+			'      "version": "0.128.0",',
+			'      "binPath": "/home/user/.aura-code/runtimes/codex/0.128.0-linux-x64/bin/codex"',
+			'    }',
+			'  }',
+			'}'
+		].join('\n'));
+		assert.strictEqual(probe.registry.runtimes.codex.version, '0.128.0');
+	});
+
 	test('probe script reads uname and registry file', () => {
 		const script = buildAuraRuntimeProbeScript();
 		assert.match(script, /uname -s/);
 		assert.match(script, /uname -m/);
 		assert.match(script, /\.aura-code\/runtimes\/registry.json/);
+		assert.match(script, /json.dumps/);
 	});
 
 	test('install script validates sha256 and writes registry', () => {
