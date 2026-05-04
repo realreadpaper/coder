@@ -40,15 +40,16 @@ suite('Remote Codex runner', () => {
 		assert.strictEqual(codexPath, '/opt/codex/bin/codex');
 	});
 
-	test('uses Linux installer path when remote CLI path is empty', () => {
+	test('resolves managed Aura Code path when remoteCliPath is empty', () => {
 		const codexPath = resolveRemoteCodexPath({
 			remoteCliPath: '',
 			globalStoragePath: '/home/user/.remote-ai-server/User/globalStorage/our.ai-codex-remote-bridge',
 			platform: 'linux',
-			arch: 'x64'
+			arch: 'x64',
+			home: '/home/user'
 		});
 
-		assert.strictEqual(codexPath, '/home/user/.remote-ai-server/User/globalStorage/our.ai-codex-remote-bridge/codex-cli/0.128.0-linux-x64/bin/codex');
+		assert.strictEqual(codexPath, '/home/user/.aura-code/runtimes/codex/0.128.0-linux-x64/bin/codex');
 	});
 
 	test('rejects non-Linux remote platforms', () => {

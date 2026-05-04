@@ -13,6 +13,7 @@ export interface RemoteCodexPathOptions {
 	readonly globalStoragePath: string;
 	readonly platform?: NodeJS.Platform;
 	readonly arch?: string;
+	readonly home?: string;
 }
 
 export interface RemoteCodexTaskPlan {
@@ -39,7 +40,9 @@ export function resolveRemoteCodexPath(options: RemoteCodexPathOptions): string 
 	return createCodexCliInstallPlan(
 		options.globalStoragePath,
 		options.platform ?? process.platform,
-		options.arch ?? process.arch
+		options.arch ?? process.arch,
+		undefined,
+		options.home ?? process.env.HOME
 	).binPath;
 }
 

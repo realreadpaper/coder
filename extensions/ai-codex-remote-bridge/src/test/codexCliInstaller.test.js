@@ -19,10 +19,10 @@ suite('Codex CLI installer', () => {
 		assert.throws(() => codexPlatformPackage('darwin', 'x64'), /Remote Codex CLI must be Linux/);
 	});
 
-	test('creates install plan rooted in remote global storage', () => {
-		const plan = createCodexCliInstallPlan('/home/user/.remote-ai-server/User/globalStorage/our.ai-codex-remote-bridge', 'linux', 'x64', '0.128.0');
+	test('creates Aura Code install plan rooted in remote home', () => {
+		const plan = createCodexCliInstallPlan('/home/user/.remote-ai-server/User/globalStorage/our.ai-codex-remote-bridge', 'linux', 'x64', '0.128.0', '/home/user');
 		assert.strictEqual(plan.packageName, '@openai/codex@0.128.0-linux-x64');
-		assert.strictEqual(plan.binPath, '/home/user/.remote-ai-server/User/globalStorage/our.ai-codex-remote-bridge/codex-cli/0.128.0-linux-x64/bin/codex');
-		assert.strictEqual(plan.binaryRelativePath, 'package/vendor/x86_64-unknown-linux-musl/codex/codex');
+		assert.strictEqual(plan.binPath, '/home/user/.aura-code/runtimes/codex/0.128.0-linux-x64/bin/codex');
+		assert.strictEqual(plan.binaryRelativePath, 'bin/codex');
 	});
 });
