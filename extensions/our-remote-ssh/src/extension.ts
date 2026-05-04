@@ -197,7 +197,12 @@ async function configureCodexUiForWorkspace(
 
 	if (!plan) {
 		if (isManagedCodexSshWrapper(currentCliExecutable)) {
-			await chatgptConfiguration.update('cliExecutable', undefined, vscode.ConfigurationTarget.Global);
+			try {
+				await chatgptConfiguration.update('cliExecutable', undefined, vscode.ConfigurationTarget.Global);
+			} catch (error) {
+				output.appendLine(`Unable to clear Codex sidebar CLI setting: ${error instanceof Error ? error.message : String(error)}`);
+				return;
+			}
 			output.appendLine('Restored Codex sidebar CLI to the local default for this local workspace.');
 			await auditLog.record({
 				operation: 'codex.ui.configure',
@@ -304,7 +309,20 @@ async function configureCodexUiForWorkspace(
 	await fs.promises.writeFile(plan.wrapperPath, plan.script, { mode: 0o755 });
 	await fs.promises.chmod(plan.wrapperPath, 0o755);
 	if (currentCliExecutable !== plan.wrapperPath) {
-		await chatgptConfiguration.update('cliExecutable', plan.wrapperPath, vscode.ConfigurationTarget.Global);
+		try {
+			await chatgptConfiguration.update('cliExecutable', plan.wrapperPath, vscode.ConfigurationTarget.Global);
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			output.appendLine(`Unable to configure Codex sidebar CLI setting: ${message}`);
+			await auditLog.record({
+				operation: 'codex.ui.configure',
+				status: 'failed',
+				authority: `ssh-remote+${encodeURIComponent(plan.host)}`,
+				workspaceRoot: plan.remotePath,
+				metadata: { wrapperPath: plan.wrapperPath, remoteCliPath: plan.remoteCliPath, error: message }
+			});
+			return;
+		}
 		output.appendLine(`Configured Codex sidebar for ${plan.host}:${plan.remotePath}`);
 		output.appendLine(`Codex UI wrapper: ${plan.wrapperPath}`);
 		await auditLog.record({
