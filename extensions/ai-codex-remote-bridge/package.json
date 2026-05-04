@@ -9,15 +9,15 @@
 		"vscode": "^1.105.0"
 	},
 	"extensionKind": [
-		"workspace"
+		"ui"
 	],
 	"activationEvents": [
 		"onStartupFinished",
 		"onCommand:remoteai.codex.inspectWorkspace",
-		"onCommand:remoteai.codex.prepareRemoteCli",
 		"onCommand:remoteai.codex.assertWorkspacePath",
 		"onCommand:remoteai.codex.runWorkspaceSmoke",
-		"onCommand:remoteai.codex.applyApprovedPatch"
+		"onCommand:remoteai.codex.applyApprovedPatch",
+		"onCommand:remoteai.codex.runTask"
 	],
 	"main": "./out/extension",
 	"scripts": {
@@ -28,11 +28,6 @@
 			{
 				"command": "remoteai.codex.inspectWorkspace",
 				"title": "Inspect Remote Codex Workspace",
-				"category": "RemoteAI"
-			},
-			{
-				"command": "remoteai.codex.prepareRemoteCli",
-				"title": "Prepare Remote Codex CLI",
 				"category": "RemoteAI"
 			},
 			{
@@ -49,15 +44,35 @@
 				"command": "remoteai.codex.applyApprovedPatch",
 				"title": "Apply Approved Codex Patch",
 				"category": "RemoteAI"
+			},
+			{
+				"command": "remoteai.codex.runTask",
+				"title": "Run Codex Task in Remote Workspace",
+				"category": "RemoteAI"
 			}
 		],
 		"configuration": {
 			"title": "RemoteAI Codex Bridge",
 			"properties": {
+				"remoteai.codex.localCliPath": {
+					"type": "string",
+					"default": "",
+					"description": "Local Codex CLI path used only for non-remote workspaces. Leave empty to resolve codex from the local PATH."
+				},
 				"remoteai.codex.remoteCliPath": {
 					"type": "string",
 					"default": "",
-					"description": "Absolute remote path to an existing Linux Codex CLI binary."
+					"description": "Remote Linux Codex CLI path used when this extension runs in a RemoteAI SSH workspace. Leave empty to use the managed remote Linux install path."
+				},
+				"remoteai.codex.sandboxMode": {
+					"type": "string",
+					"enum": [
+						"read-only",
+						"workspace-write",
+						"danger-full-access"
+					],
+					"default": "danger-full-access",
+					"description": "Sandbox mode used by the Codex process in the current workspace execution host."
 				}
 			}
 		}
