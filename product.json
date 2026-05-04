@@ -13,6 +13,15 @@
 	"serverApplicationName": "remote-ai-server",
 	"serverDataFolderName": ".remote-ai-server",
 	"serverDownloadUrlTemplate": "https://releases.remote-ai.internal/remote-releases/${commit}/vscode-reh-${os}-${arch}.tar.gz",
+	"extensionsGallery": {
+		"serviceUrl": "https://marketplace.visualstudio.com/_apis/public/gallery",
+		"itemUrl": "https://marketplace.visualstudio.com/items",
+		"resourceUrlTemplate": "https://{publisher}.gallerycdn.vsassets.io/extensions/{publisher}/{name}/{version}/{path}",
+		"controlUrl": "",
+		"recommendationsUrl": "",
+		"nlsBaseUrl": "",
+		"publisherUrl": ""
+	},
 	"extensionEnabledApiProposals": {
 		"our.remote-ssh": [
 			"resolvers",
@@ -22,15 +31,18 @@
 		],
 		"openai.chatgpt": [
 			"chatSessionsProvider",
+			"contribSecondarySidebar",
 			"languageModelProxy"
 		],
 		"our.ai-codex-remote-bridge": [
 			"terminalDataWriteEvent"
 		]
 	},
-	"extensionKindOverrides": {
+	"extensionKind": {
 		"openai.chatgpt": [
-			"ui",
+			"ui"
+		],
+		"our.ai-codex-remote-bridge": [
 			"workspace"
 		]
 	},

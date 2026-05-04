@@ -14,6 +14,9 @@ REMOTE_PATH="${REMOTE_AI_VALIDATE_REMOTE_PATH:-/home/hejianglong/remote-ai-manua
 COMMIT="${REMOTE_AI_VALIDATE_COMMIT:-dev-compat}"
 USER_DATA_DIR="${REMOTE_AI_VALIDATE_USER_DATA_DIR:-/tmp/remote-ai-validate-user-data}"
 LOGS_DIR="${REMOTE_AI_VALIDATE_LOGS_DIR:-/tmp/remote-ai-validate-logs}"
+CODEX_EXTENSIONS_DIR="${REMOTE_AI_VALIDATE_EXTENSIONS_DIR:-$HOME/.vscode/extensions}"
+LOCAL_CODEX_CLI="${REMOTE_AI_VALIDATE_CODEX_CLI:-$(command -v codex || true)}"
+REMOTE_CODEX_CLI="${REMOTE_AI_VALIDATE_REMOTE_CODEX_CLI:-}"
 RELEASE_DIR="$ROOT/remote-releases/$COMMIT"
 MANIFEST_PATH="$RELEASE_DIR/manifest.json"
 TARBALL_PATH="$RELEASE_DIR/vscode-reh-linux-x64.tar.gz"
@@ -31,6 +34,9 @@ REMOTE_AI_VALIDATE_REMOTE_PATH       Remote workspace, default: /home/hejianglon
 REMOTE_AI_VALIDATE_USER_DATA_DIR     Local user data dir, default: /tmp/remote-ai-validate-user-data
 REMOTE_AI_VALIDATE_LOGS_DIR          Local logs dir, default: /tmp/remote-ai-validate-logs
 REMOTE_AI_VALIDATE_COMMIT            RemoteAI server commit id, default: dev-compat
+REMOTE_AI_VALIDATE_EXTENSIONS_DIR    Local extensions dir, default: ~/.vscode/extensions
+REMOTE_AI_VALIDATE_CODEX_CLI         Local Codex CLI for the OpenAI UI extension, default: PATH codex
+REMOTE_AI_VALIDATE_REMOTE_CODEX_CLI  Remote Linux Codex CLI path. Empty prepares one on the SSH host
 EOF
 }
 
@@ -75,12 +81,22 @@ if [[ ! -f "$MANIFEST_PATH" || ! -f "$TARBALL_PATH" ]]; then
 fi
 node build/remote-ai/releaseDoctor.js "$MANIFEST_PATH" >/dev/null
 
+EXTENSION_ARGS=()
+if [[ -d "$CODEX_EXTENSIONS_DIR" ]]; then
+	node build/remote-ai/codexExtensionPatch.js "$CODEX_EXTENSIONS_DIR" >/dev/null
+	EXTENSION_ARGS+=(--extensions-dir="$CODEX_EXTENSIONS_DIR")
+fi
+
+if [[ -z "$REMOTE_CODEX_CLI" ]]; then
+	REMOTE_CODEX_CLI="$(REMOTE_AI_CODEX_HOST="$HOST" scripts/remote-ai-prepare-codex.sh | tail -n 1)"
+fi
+
 mkdir -p "$USER_DATA_DIR/User" "$LOGS_DIR"
-node - "$ROOT" "$USER_DATA_DIR" "$MANIFEST_PATH" "$TARBALL_PATH" "$COMMIT" "$REMOTE_PATH" <<'NODE'
+node - "$ROOT" "$USER_DATA_DIR" "$MANIFEST_PATH" "$TARBALL_PATH" "$COMMIT" "$REMOTE_PATH" "$LOCAL_CODEX_CLI" "$REMOTE_CODEX_CLI" <<'NODE'
 const fs = require('fs');
 const path = require('path');
 
-const [, , root, userDataDir, manifestPath, tarballPath, commit, remotePath] = process.argv;
+const [, , root, userDataDir, manifestPath, tarballPath, commit, remotePath, localCodexCli, remoteCodexCli] = process.argv;
 const settingsPath = path.join(userDataDir, 'User', 'settings.json');
 const settings = {
 	'remoteai.ssh.serverManifestPath': manifestPath,
@@ -88,6 +104,13 @@ const settings = {
 	'remoteai.ssh.commit': commit,
 	'remoteai.ssh.defaultRemotePath': remotePath,
 	'remoteai.ssh.sshPath': 'ssh',
+	'remote.extensionKind': {
+		'openai.chatgpt': ['ui'],
+		'our.ai-codex-remote-bridge': ['workspace']
+	},
+	'remoteai.codex.remoteCliPath': remoteCodexCli,
+	'remoteai.codex.sandboxMode': 'danger-full-access',
+	'chatgpt.useExperimentalLspMcpServer': true,
 	'terminal.integrated.defaultProfile.linux': 'bash',
 	'terminal.integrated.profiles.linux': {
 		bash: {
@@ -95,6 +118,9 @@ const settings = {
 		}
 	}
 };
+if (localCodexCli) {
+	settings['chatgpt.cliExecutable'] = localCodexCli;
+}
 fs.mkdirSync(path.dirname(settingsPath), { recursive: true });
 fs.writeFileSync(settingsPath, `${JSON.stringify(settings, null, 2)}\n`);
 NODE
@@ -107,6 +133,8 @@ echo "[remote-ai] user-data: $USER_DATA_DIR"
 echo "[remote-ai] logs:      $LOGS_DIR"
 echo "[remote-ai] host:      $HOST"
 echo "[remote-ai] path:      $REMOTE_PATH"
+echo "[remote-ai] codex UI:  ${LOCAL_CODEX_CLI:-codex}"
+echo "[remote-ai] codex SSH: $REMOTE_CODEX_CLI"
 
 if [[ "$PREPARE_ONLY" == "1" ]]; then
 	echo "[remote-ai] prepare-only complete."
@@ -122,4 +150,5 @@ exec "$ROOT/scripts/code.sh" \
 	--disable-telemetry \
 	--disable-updates \
 	--user-data-dir="$USER_DATA_DIR" \
-	--logsPath="$LOGS_DIR"
+	--logsPath="$LOGS_DIR" \
+	"${EXTENSION_ARGS[@]}"

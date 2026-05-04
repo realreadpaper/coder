@@ -13,6 +13,12 @@ suite('RemoteAI product configuration', () => {
 		assert.match(product.serverDownloadUrlTemplate, /remote-releases\/\$\{commit\}\/vscode-reh-\$\{os\}-\$\{arch\}\.tar\.gz/);
 	});
 
+	test('declares an extension gallery for plugin search and install', () => {
+		assert.strictEqual(product.extensionsGallery.serviceUrl, 'https://marketplace.visualstudio.com/_apis/public/gallery');
+		assert.strictEqual(product.extensionsGallery.itemUrl, 'https://marketplace.visualstudio.com/items');
+		assert.strictEqual(product.extensionsGallery.resourceUrlTemplate, 'https://{publisher}.gallerycdn.vsassets.io/extensions/{publisher}/{name}/{version}/{path}');
+	});
+
 	test('authorizes required proposed APIs', () => {
 		assert.deepStrictEqual([...product.extensionEnabledApiProposals['our.remote-ssh']].sort(), [
 			'contribRemoteHelp',
@@ -22,8 +28,15 @@ suite('RemoteAI product configuration', () => {
 		].sort());
 		assert.deepStrictEqual([...product.extensionEnabledApiProposals['openai.chatgpt']].sort(), [
 			'chatSessionsProvider',
+			'contribSecondarySidebar',
 			'languageModelProxy'
 		].sort());
+	});
+
+	test('runs Codex bridge in the workspace extension host', () => {
+		assert.deepStrictEqual(product.extensionKind['openai.chatgpt'], ['ui']);
+		assert.deepStrictEqual(product.extensionKind['our.ai-codex-remote-bridge'], ['workspace']);
+		assert.strictEqual(product.extensionKindOverrides, undefined);
 	});
 
 	test('declares audit configuration', () => {
