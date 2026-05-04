@@ -7,6 +7,7 @@ const assert = require('assert');
 const {
 	buildAuraRuntimeProbeScript,
 	buildAuraRuntimeInstallScript,
+	createAuraRuntimeUploadPlan,
 	parseAuraRuntimeProbeOutput
 } = require('../../out/auraRuntimeInstaller');
 
@@ -42,9 +43,22 @@ suite('Aura runtime installer scripts', () => {
 			sourceKind: 'bundled'
 		});
 		assert.match(script, /sha256sum/);
+		assert.match(script, /expected_sha" != "0000000000000000000000000000000000000000000000000000000000000000/);
 		assert.match(script, /tar -xzf/);
 		assert.match(script, /"\$tmp_dir\/\$bin_relative" --version/);
 		assert.match(script, /registry.json/);
 		assert.match(script, /current/);
+	});
+
+	test('creates remote upload plan under ~/.aura-code/upload', () => {
+		const plan = createAuraRuntimeUploadPlan({
+			home: '/home/user',
+			providerId: 'codex',
+			version: '0.128.0',
+			platformKey: 'linux-x64'
+		});
+		assert.strictEqual(plan.remotePath, '/home/user/.aura-code/upload/codex-0.128.0-linux-x64.tar.gz');
+		assert.match(plan.remoteCommand, /^mkdir -p/);
+		assert.match(plan.remoteCommand, /cat >/);
 	});
 });

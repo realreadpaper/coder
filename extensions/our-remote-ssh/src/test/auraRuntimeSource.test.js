@@ -4,7 +4,10 @@
  *--------------------------------------------------------------------------------------------*/
 
 const assert = require('assert');
-const { chooseAuraRuntimeSource } = require('../../out/auraRuntimeSource');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const { chooseAuraRuntimeSource, hashAuraRuntimeFile } = require('../../out/auraRuntimeSource');
 
 suite('Aura runtime source', () => {
 	test('uses local cache before network sources', () => {
@@ -78,5 +81,13 @@ suite('Aura runtime source', () => {
 			mirrorUrl: '',
 			networkAvailable: false
 		}), /No Aura runtime source available for codex 0.128.0 linux-arm64/);
+	});
+
+	test('hashes runtime files with sha256', async () => {
+		const dir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'aura-runtime-'));
+		const file = path.join(dir, 'runtime.tar.gz');
+		await fs.promises.writeFile(file, 'codex-runtime');
+		const hash = await hashAuraRuntimeFile(file);
+		assert.strictEqual(hash, 'fc8f82d54f407266e72d07b7222ccda5eccb619d5526cf84580c2a6ab6f2e772');
 	});
 });

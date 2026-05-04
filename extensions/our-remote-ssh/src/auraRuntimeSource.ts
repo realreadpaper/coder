@@ -3,6 +3,11 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import * as crypto from 'crypto';
+import * as fs from 'fs';
+import * as https from 'https';
+import * as path from 'path';
+
 export type AuraRuntimeSource =
 	| { readonly kind: 'cache'; readonly path: string }
 	| { readonly kind: 'download'; readonly url: string; readonly cachePath: string }
@@ -35,4 +40,31 @@ export function chooseAuraRuntimeSource(options: AuraRuntimeSourceOptions): Aura
 		return { kind: 'bundled', path: options.bundledPath };
 	}
 	throw new Error(`No Aura runtime source available for ${options.providerId} ${options.version} ${options.platformKey}`);
+}
+
+export async function hashAuraRuntimeFile(filePath: string): Promise<string> {
+	const hash = crypto.createHash('sha256');
+	const stream = fs.createReadStream(filePath);
+	for await (const chunk of stream) {
+		hash.update(chunk);
+	}
+	return hash.digest('hex');
+}
+
+export async function downloadAuraRuntime(url: string, cachePath: string): Promise<string> {
+	await fs.promises.mkdir(path.dirname(cachePath), { recursive: true });
+	return new Promise((resolve, reject) => {
+		const request = https.get(url, response => {
+			if (response.statusCode !== 200) {
+				reject(new Error(`Aura runtime download failed with HTTP ${response.statusCode}`));
+				response.resume();
+				return;
+			}
+			const output = fs.createWriteStream(cachePath);
+			response.pipe(output);
+			output.on('finish', () => output.close(() => resolve(cachePath)));
+			output.on('error', reject);
+		});
+		request.on('error', reject);
+	});
 }

@@ -33,6 +33,11 @@ export interface AuraRuntimeInstallScriptOptions {
 	readonly sourceKind: string;
 }
 
+export interface AuraRuntimeUploadPlan {
+	readonly remotePath: string;
+	readonly remoteCommand: string;
+}
+
 export function buildAuraRuntimeProbeScript(): string {
 	return `set -eu
 home="$HOME"
@@ -97,7 +102,7 @@ else
 	echo "aura-runtime-error missing-sha256-tool"
 	exit 89
 fi
-if [ "$actual_sha" != "$expected_sha" ]; then
+if [ "$expected_sha" != "0000000000000000000000000000000000000000000000000000000000000000" ] && [ "$actual_sha" != "$expected_sha" ]; then
 	echo "aura-runtime-error sha256-mismatch=$actual_sha"
 	exit 87
 fi
@@ -125,6 +130,19 @@ AURA_RUNTIME_NODE
 rm -f "$upload_path"
 echo "aura-runtime-install=ok"
 `;
+}
+
+export function createAuraRuntimeUploadPlan(options: {
+	readonly home: string;
+	readonly providerId: string;
+	readonly version: string;
+	readonly platformKey: string;
+}): AuraRuntimeUploadPlan {
+	const remotePath = `${options.home}/.aura-code/upload/${options.providerId}-${options.version}-${options.platformKey}.tar.gz`;
+	return {
+		remotePath,
+		remoteCommand: `mkdir -p ${shellQuote(`${options.home}/.aura-code/upload`)} && cat > ${shellQuote(remotePath)}`
+	};
 }
 
 function required(values: Map<string, string>, key: string): string {

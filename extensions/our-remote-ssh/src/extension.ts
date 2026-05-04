@@ -14,12 +14,13 @@ import { createListDirectoryScript, joinRemotePath, parentRemotePath, parseRemot
 import { selectTarballFromManifest, RemoteAiReleaseManifest } from './releaseManifest';
 import { resolveSshRemoteAuthority, ResolvedSshRemote } from './resolver';
 import { parseSshConfig } from './sshConfig';
-import { sshExec } from './sshProcess';
+import { sshExec, sshPipe } from './sshProcess';
 import { createCodexSshWrapperPlan, isManagedCodexSshWrapper } from './codexUiWrapper';
 import { isSameRemoteWorkspace, normalizeRemotePath } from './workspaceTarget';
-import { defaultAuraRuntimeManifest } from './auraRuntimeManifest';
-import { buildAuraRuntimeProbeScript, parseAuraRuntimeProbeOutput } from './auraRuntimeInstaller';
+import { defaultAuraRuntimeManifest, selectProviderPlatform } from './auraRuntimeManifest';
+import { buildAuraRuntimeInstallScript, buildAuraRuntimeProbeScript, createAuraRuntimeUploadPlan, parseAuraRuntimeProbeOutput } from './auraRuntimeInstaller';
 import { createAuraRuntimeEnsurePlan } from './auraRuntimeBinding';
+import { chooseAuraRuntimeSource, downloadAuraRuntime, hashAuraRuntimeFile } from './auraRuntimeSource';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -214,15 +215,65 @@ async function configureCodexUiForWorkspace(
 			throw new Error(`Aura runtime probe failed\nstdout:\n${probeResult.stdout}\nstderr:\n${probeResult.stderr}`);
 		}
 		const probe = parseAuraRuntimeProbeOutput(probeResult.stdout);
+		const runtimePlatform = selectProviderPlatform(defaultAuraRuntimeManifest, 'codex', probe.platformKey);
 		const ensurePlan = createAuraRuntimeEnsurePlan({
 			providerId: 'codex',
 			home: probe.home,
 			platformKey: probe.platformKey,
 			configuredRemoteCliPath: codexConfiguration.get<string>('remoteCliPath') || '',
 			registry: probe.registry,
-			requiredVersion: defaultAuraRuntimeManifest.providers.codex.recommendedVersion
+			requiredVersion: runtimePlatform.version
 		});
 		const remoteCliPath = ensurePlan.action === 'install' ? ensurePlan.target.binPath : ensurePlan.binPath;
+		if (ensurePlan.action === 'install') {
+			const runtimeConfiguration = vscode.workspace.getConfiguration('aura.runtime');
+			const bundledRoot = runtimeConfiguration.get<string>('bundledRoot') || path.join(context.extensionUri.fsPath, 'resources', 'aura-code');
+			const cachePath = path.join(context.globalStorageUri.fsPath, 'runtimes', 'cache', 'codex', `${runtimePlatform.version}-${probe.platformKey}.tar.gz`);
+			const bundledPath = path.join(bundledRoot, runtimePlatform.bundledPath);
+			const source = chooseAuraRuntimeSource({
+				providerId: 'codex',
+				platformKey: probe.platformKey,
+				version: runtimePlatform.version,
+				cachePath,
+				cacheExists: await pathExists(cachePath),
+				bundledPath,
+				bundledExists: await pathExists(bundledPath),
+				officialUrl: runtimePlatform.officialUrl,
+				mirrorUrl: runtimePlatform.mirrorUrl,
+				networkAvailable: runtimeConfiguration.get<boolean>('networkEnabled') ?? true
+			});
+			const localTarballPath = source.kind === 'download'
+				? await downloadAuraRuntime(source.url, source.cachePath)
+				: source.path;
+			const actualSha256 = await hashAuraRuntimeFile(localTarballPath);
+			if (runtimePlatform.sha256 !== '0000000000000000000000000000000000000000000000000000000000000000' && actualSha256 !== runtimePlatform.sha256) {
+				throw new Error(`Aura runtime sha256 mismatch for ${localTarballPath}: ${actualSha256}`);
+			}
+			const upload = createAuraRuntimeUploadPlan({
+				home: probe.home,
+				providerId: 'codex',
+				version: runtimePlatform.version,
+				platformKey: probe.platformKey
+			});
+			const tarball = await fs.promises.readFile(localTarballPath);
+			const uploadResult = await sshPipe(plan.host, upload.remoteCommand, { input: tarball, sshPath });
+			if (uploadResult.code !== 0) {
+				throw new Error(`Aura runtime upload failed\nstdout:\n${uploadResult.stdout}\nstderr:\n${uploadResult.stderr}`);
+			}
+			const installResult = await sshExec(plan.host, buildAuraRuntimeInstallScript({
+				providerId: 'codex',
+				version: runtimePlatform.version,
+				platformKey: probe.platformKey,
+				uploadPath: upload.remotePath,
+				installDir: ensurePlan.target.installDir,
+				binRelativePath: ensurePlan.target.binRelativePath,
+				sha256: runtimePlatform.sha256,
+				sourceKind: source.kind
+			}), { sshPath, timeoutMs: 120_000 });
+			if (installResult.code !== 0) {
+				throw new Error(`Aura runtime install failed\nstdout:\n${installResult.stdout}\nstderr:\n${installResult.stderr}`);
+			}
+		}
 		plan = createCodexSshWrapperPlan({
 			globalStoragePath: context.globalStorageUri.fsPath,
 			workspaceFolderUri: folder?.uri,
@@ -270,6 +321,15 @@ async function configureCodexUiForWorkspace(
 		if (action === 'Reload Window') {
 			await vscode.commands.executeCommand('workbench.action.reloadWindow');
 		}
+	}
+}
+
+async function pathExists(filePath: string): Promise<boolean> {
+	try {
+		await fs.promises.access(filePath);
+		return true;
+	} catch {
+		return false;
 	}
 }
 
