@@ -36,7 +36,7 @@ The source modules remain in the repository because parts of VS Code, proposed A
 The OpenAI Codex VS Code extension is still a VS Code extension. This fork supports it by:
 
 - Enabling required proposed API entries for `openai.chatgpt` in `product.json`.
-- Setting `extensionKindOverrides.openai.chatgpt` to allow UI and workspace execution.
+- Running `openai.chatgpt` in the local UI extension host so its sidebar stays local.
 - Adding `our.ai-codex-remote-bridge` as a workspace extension that runs in the remote Extension Host.
 - Selecting Linux Codex CLI packages by remote OS/arch, rejecting local macOS CLI reuse.
 - Adding `our.ai-approval-ui` as a UI extension for approval requests.
@@ -46,9 +46,12 @@ RemoteAI runs Codex tasks directly in the workspace execution host:
 
 - Local workspaces use the local Codex CLI and local filesystem.
 - RemoteAI SSH workspaces use the Remote Extension Host, remote Linux Codex CLI, and remote workspace filesystem.
+- Other remote authorities are rejected for Codex task execution so commands never run in an ambiguous location.
 - The previous local mirror plus rsync execution path is removed from production code.
 
-The bridge does not copy or modify the Codex extension. It provides the remote-side guardrails and platform selection needed for Codex to operate on the remote workspace through normal VS Code APIs.
+The Codex sidebar is configured before an SSH workspace opens. Aura SSH probes or installs the remote runtime, syncs the minimum Codex credentials, writes a managed SSH wrapper, and points `chatgpt.cliExecutable` at that wrapper before Codex starts. The status bar shows the current binding state: local mode, checking, remote active, or remote unavailable. A failed runtime bind writes a blocking remote-only wrapper instead of falling back to local `codex`.
+
+The bridge does not copy or modify the Codex extension. It provides the local/SSH routing, remote-side guardrails, and platform selection needed for Codex to operate on the correct workspace through normal VS Code APIs.
 
 ## Server Packaging
 
@@ -123,7 +126,7 @@ Run `RemoteAI: Show Diagnostics` from the command palette, or click `Diagnostics
 
 ## Verified Evidence
 
-Fresh local verification on May 3, 2026:
+Fresh local verification on May 5, 2026:
 
 ```sh
 node ./node_modules/gulp/bin/gulp.js \
@@ -155,12 +158,14 @@ npx mocha --timeout 10000 --ui=tdd \
 node test/remote-ai/e2e/remoteAiFullE2E.js
 ```
 
-Fresh result on May 3, 2026:
+Fresh result on May 5, 2026:
 
-- `npm run compile`: passed with 0 errors.
-- RemoteAI unit tests: 58 passing.
-- `releaseDoctor`: passed for `remote-releases/dev-compat/manifest.json`.
-- GUI/SSH E2E against `ssh dev`: passed, including Chat/Inline Chat/New Chat/Chat: Command Palette checks, Dashboard host entry, remote folder browser selection, remote workspace smoke, and approved Codex patch.
+- TypeScript compile for `our-remote-ssh` and `ai-codex-remote-bridge`: passed with 0 errors.
+- `extensions/ai-codex-remote-bridge/src/test/*.test.js`: 24 passing.
+- `extensions/our-remote-ssh/src/test/*.test.js`: 88 passing.
+- `build/remote-ai/test/*.test.js`: 22 passing.
+- Codex extension patch verification: `cwdSanitizer=true` and `leftDisabled=true` for installed OpenAI Codex bundles.
+- Deployment sync refreshed `.build/extensions`, the packaged macOS app extension directories, and the Linux REH extension directory.
 - `git diff --check`: passed.
 
 Fresh `ssh dev` verification installed and launched:

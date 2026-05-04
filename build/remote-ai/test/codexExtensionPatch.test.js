@@ -4,7 +4,11 @@
  *--------------------------------------------------------------------------------------------*/
 
 const assert = require('assert');
-const { patchCodexSecondarySidebarGate } = require('../codexExtensionPatch');
+const {
+	patchCodexPrimarySidebarFallback,
+	patchCodexRemoteWorkspaceCwd,
+	patchCodexSecondarySidebarGate
+} = require('../codexExtensionPatch');
 
 suite('Codex extension patch', () => {
 	test('lowers Codex secondary sidebar version gate for Code-OSS 1.105', () => {
@@ -21,5 +25,31 @@ suite('Codex extension patch', () => {
 
 		assert.strictEqual(result.patched, false);
 		assert.strictEqual(result.source, source);
+	});
+
+	test('disables Codex primary sidebar fallback when secondary sidebar is available', () => {
+		const pkg = {
+			contributes: {
+				viewsContainers: {
+					activitybar: [{ id: 'codexViewContainer', when: 'chatgpt.doesNotSupportSecondarySidebar' }],
+					secondarySidebar: [{ id: 'codexSecondaryViewContainer', when: '!chatgpt.doesNotSupportSecondarySidebar' }]
+				}
+			}
+		};
+		const result = patchCodexPrimarySidebarFallback(pkg);
+
+		assert.strictEqual(result.patched, true);
+		assert.strictEqual(pkg.contributes.viewsContainers.activitybar[0].when, 'chatgpt.forcePrimarySidebarDisabled');
+	});
+
+	test('forces app-server request cwd to the active SSH workspace', () => {
+		const source = 'sendMessage(e){return this.proc.stdin.write(JSON.stringify(e)+`\\n`)}';
+		const result = patchCodexRemoteWorkspaceCwd(source);
+
+		assert.strictEqual(result.patched, true);
+		assert.match(result.source, /remoteAiWorkspaceCwd/);
+		assert.match(result.source, /vscode-remote/);
+		assert.match(result.source, /typeof i\.cwd==="string"/);
+		assert.doesNotMatch(result.source, /JSON\.stringify\\(e\\)\\+`\\\\n`/);
 	});
 });

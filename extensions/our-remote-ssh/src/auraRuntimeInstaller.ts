@@ -38,6 +38,11 @@ export interface AuraRuntimeUploadPlan {
 	readonly remoteCommand: string;
 }
 
+export interface AuraRuntimeRemoteDownloadScriptOptions {
+	readonly url: string;
+	readonly remotePath: string;
+}
+
 export function buildAuraRuntimeProbeScript(): string {
 	return `set -eu
 home="$HOME"
@@ -108,8 +113,11 @@ if [ "$expected_sha" != "0000000000000000000000000000000000000000000000000000000
 fi
 tar -xzf "$upload_path" -C "$tmp_dir"
 if [ ! -x "$tmp_dir/$bin_relative" ]; then
-	echo "aura-runtime-error missing-binary=$tmp_dir/$bin_relative"
-	exit 88
+	chmod +x "$tmp_dir/$bin_relative" 2>/dev/null || true
+	if [ ! -x "$tmp_dir/$bin_relative" ]; then
+		echo "aura-runtime-error missing-binary=$tmp_dir/$bin_relative"
+		exit 88
+	fi
 fi
 "$tmp_dir/$bin_relative" --version >/dev/null
 rm -rf "$install_dir"
@@ -129,6 +137,23 @@ fs.writeFileSync(registryPath, JSON.stringify(registry, null, 2));
 AURA_RUNTIME_NODE
 rm -f "$upload_path"
 echo "aura-runtime-install=ok"
+`;
+}
+
+export function buildAuraRuntimeRemoteDownloadScript(options: AuraRuntimeRemoteDownloadScriptOptions): string {
+	return `set -eu
+url=${shellQuote(options.url)}
+remote_path=${shellQuote(options.remotePath)}
+mkdir -p "$(dirname "$remote_path")"
+if command -v curl >/dev/null 2>&1; then
+	curl -fL --retry 2 --connect-timeout 15 -o "$remote_path" "$url"
+elif command -v wget >/dev/null 2>&1; then
+	wget -O "$remote_path" "$url"
+else
+	echo "aura-runtime-error missing-download-tool"
+	exit 86
+fi
+echo "aura-runtime-download=ok"
 `;
 }
 

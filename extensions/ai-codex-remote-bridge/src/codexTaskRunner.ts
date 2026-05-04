@@ -53,11 +53,12 @@ export function buildCodexExecArgs(options: CodexTaskOptions): string[] {
 
 export async function runCodexWorkspaceTask(options: CodexTaskRunOptions): Promise<CodexTaskResult> {
 	const args = buildCodexExecArgs(options);
+	const binDir = path.dirname(options.codexPath);
 	const { stdout, stderr } = await spawnCodex(options.codexPath, args, {
 		cwd: options.workspaceRoot,
 		env: {
 			...process.env,
-			PATH: extendPath(path.dirname(options.codexPath))
+			PATH: binDir === '.' ? process.env.PATH : extendPath(binDir)
 		}
 	});
 	return {

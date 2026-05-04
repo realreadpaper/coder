@@ -322,11 +322,19 @@ cat /home/hejianglong/remote-ai-manual/.remote-ai-smoke/workspace-smoke.json
 
 验证 Codex 是否运行在正确上下文：
 
-1. 打开 Codex 面板或 Codex 命令入口。
-2. 要求 Codex 读取当前工作区的 `README.md` 和 `index.ts`。
-3. 要求 Codex 对 `README.md` 做一个很小的修改。
-4. 当审批 UI 出现时，确认审批内容只涉及远程工作区文件。
-5. 点击批准。
+1. 确认状态栏显示 `Aura Codex: remote active`。如果显示 `checking`，等待初始化完成；如果显示 `remote unavailable`，点击状态项打开诊断。
+2. 打开 Codex 面板或 Codex 命令入口。
+3. 确认打开 Codex 不触发窗口 reload。
+4. 要求 Codex 读取当前工作区的 `README.md` 和 `index.ts`。
+5. 要求 Codex 对 `README.md` 做一个很小的修改。
+6. 当审批 UI 出现时，确认审批内容只涉及远程工作区文件。
+7. 点击批准。
+
+本地工作区的补充规则：
+
+- 如果打开的是本地 `file` 工作区，Codex 应使用本机 Codex CLI 和本地文件系统。
+- 如果打开的是 `ssh-remote+dev` 工作区，Codex 原生侧栏和 `RemoteAI: Run Codex Task in Remote Workspace` 都必须使用远端 Linux Codex CLI。
+- 如果不是本地 `file` 也不是 Aura SSH remote，命令式 Codex bridge 应拒绝执行。
 
 在远程终端检查：
 

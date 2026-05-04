@@ -3,7 +3,6 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { applyCodexAppendPatch } from './codexPatch';
@@ -27,29 +26,26 @@ export function activate(context: vscode.ExtensionContext): void {
 
 	context.subscriptions.push(vscode.commands.registerCommand('remoteai.codex.inspectWorkspace', inspectWorkspace));
 	context.subscriptions.push(vscode.commands.registerCommand('remoteai.codex.assertWorkspacePath', async (candidate: string) => {
-		const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-		if (!root) {
-			throw new Error('RemoteAI Codex bridge requires a workspace folder');
-		}
+		const root = getCodexWorkspaceTarget().folder.uri.fsPath;
 		return new WorkspaceSandbox(root).assertInside(candidate);
 	}));
 	context.subscriptions.push(vscode.commands.registerCommand('remoteai.codex.runWorkspaceSmoke', async () => {
-		const root = getWorkspaceRoot();
+		const root = getSshWorkspaceTarget().folder.uri.fsPath;
 		output.appendLine(`Running RemoteAI workspace smoke in ${root}`);
 		const result = await runRemoteWorkspaceSmoke(root);
 		output.appendLine(`RemoteAI workspace smoke report: ${result.reportPath}`);
 		return result;
 	}));
 	context.subscriptions.push(vscode.commands.registerCommand('remoteai.codex.applyApprovedPatch', async () => {
-		const root = getWorkspaceRoot();
+		const root = getCodexWorkspaceTarget().folder.uri.fsPath;
 		output.appendLine(`Requesting Codex patch approval in ${root}`);
 		const result = await applyCodexAppendPatch(root);
 		output.appendLine(`Codex approved patch wrote ${result.bytesWritten} bytes to ${result.path}`);
 		return result;
 	}));
 	context.subscriptions.push(vscode.commands.registerCommand('remoteai.codex.runTask', async (initialPrompt?: string) => {
-		const folder = getWorkspaceFolder();
-		const root = folder.uri.fsPath;
+		const target = getCodexWorkspaceTarget();
+		const root = target.folder.uri.fsPath;
 		const prompt = initialPrompt ?? await vscode.window.showInputBox({
 			title: 'RemoteAI Codex: Run Task',
 			prompt: 'Task for Codex to run in the remote workspace',
@@ -61,9 +57,11 @@ export function activate(context: vscode.ExtensionContext): void {
 
 		const configuration = vscode.workspace.getConfiguration('remoteai.codex');
 		const sandboxMode = configuration.get<'read-only' | 'workspace-write' | 'danger-full-access'>('sandboxMode') || 'danger-full-access';
-		const result = vscode.env.remoteName
+		const result = target.kind === 'ssh'
 			? await runRemoteWorkspaceTask(context, output, configuration, sandboxMode, root, prompt)
-			: await runLocalWorkspaceTask(output, configuration.get<string>('localCliPath') || 'codex', sandboxMode, root, prompt);
+			: target.kind === 'local'
+				? await runLocalWorkspaceTask(output, configuration, sandboxMode, root, prompt)
+				: unreachableCodexWorkspaceTarget(target);
 		if (result.stdout) {
 			output.appendLine(result.stdout);
 		}
@@ -83,9 +81,9 @@ export interface RemoteCodexWorkspaceInfo {
 	readonly isRemote: boolean;
 }
 
-function getWorkspaceRoot(): string {
-	return getWorkspaceFolder().uri.fsPath;
-}
+type CodexWorkspaceTarget =
+	| { readonly kind: 'local'; readonly folder: vscode.WorkspaceFolder }
+	| { readonly kind: 'ssh'; readonly folder: vscode.WorkspaceFolder };
 
 function getWorkspaceFolder(): vscode.WorkspaceFolder {
 	const folder = vscode.workspace.workspaceFolders?.[0];
@@ -95,18 +93,47 @@ function getWorkspaceFolder(): vscode.WorkspaceFolder {
 	return folder;
 }
 
+function getCodexWorkspaceTarget(): CodexWorkspaceTarget {
+	const folder = getWorkspaceFolder();
+	if (vscode.env.remoteName === 'ssh-remote') {
+		return createWorkspaceTarget('ssh', folder);
+	}
+	if (!vscode.env.remoteName && folder.uri.scheme === 'file') {
+		return createWorkspaceTarget('local', folder);
+	}
+	throw new Error('RemoteAI Codex bridge supports only local file workspaces or SSH remote workspaces');
+}
+
+function getSshWorkspaceTarget(): Extract<CodexWorkspaceTarget, { readonly kind: 'ssh' }> {
+	const target = getCodexWorkspaceTarget();
+	if (target.kind !== 'ssh') {
+		throw new Error('RemoteAI workspace smoke only runs inside an SSH remote workspace');
+	}
+	return target;
+}
+
+function createWorkspaceTarget(kind: CodexWorkspaceTarget['kind'], folder: vscode.WorkspaceFolder): CodexWorkspaceTarget {
+	if (!path.isAbsolute(folder.uri.fsPath)) {
+		throw new Error(`RemoteAI Codex bridge requires an absolute remote workspace path, got: ${folder.uri.fsPath}`);
+	}
+	return { kind, folder };
+}
+
+function unreachableCodexWorkspaceTarget(target: never): never {
+	throw new Error(`Unsupported Codex workspace target: ${JSON.stringify(target)}`);
+}
+
 async function runLocalWorkspaceTask(
 	output: vscode.OutputChannel,
-	codexPath: string,
+	configuration: vscode.WorkspaceConfiguration,
 	sandboxMode: 'read-only' | 'workspace-write' | 'danger-full-access',
 	root: string,
 	prompt: string
 ) {
-	const reportDir = path.join(root, '.remote-ai-codex');
-	await fs.promises.mkdir(reportDir, { recursive: true });
-	const outputLastMessagePath = path.join(reportDir, 'last-message.md');
+	const codexPath = configuration.get<string>('localCliPath')?.trim() || 'codex';
+	const outputLastMessagePath = path.join(root, '.remote-ai-codex', 'last-message.md');
 	output.appendLine(`Running local Codex task in ${root}`);
-	output.appendLine(`Codex CLI: ${codexPath}`);
+	output.appendLine(`Local Codex CLI: ${codexPath}`);
 	return runCodexWorkspaceTask({
 		codexPath,
 		workspaceRoot: root,

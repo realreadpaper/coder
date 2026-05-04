@@ -51,9 +51,9 @@ export function defaultRemoteCodexStateRoot(globalStoragePath: string): string {
 }
 
 export function createRemoteCodexTaskPlan(options: RemoteCodexTaskOptions): RemoteCodexTaskPlan {
-	const workspaceRoot = toPosix(options.workspaceRoot);
+	const workspaceRoot = normalizeAbsoluteWorkspacePath(options.workspaceRoot, 'workspaceRoot');
 	const outputLastMessagePath = options.outputLastMessagePath
-		? toPosix(options.outputLastMessagePath)
+		? assertInsideWorkspace(workspaceRoot, normalizeAbsoluteWorkspacePath(options.outputLastMessagePath, 'outputLastMessagePath'))
 		: path.posix.join(workspaceRoot, '.remote-ai-codex', 'last-message.md');
 	return {
 		codexPath: resolveRemoteCodexPath(options),
@@ -80,4 +80,20 @@ export async function runRemoteCodexWorkspaceTask(options: RemoteCodexTaskOption
 
 function toPosix(value: string): string {
 	return value.replace(/\\/g, '/');
+}
+
+function normalizeAbsoluteWorkspacePath(value: string, name: string): string {
+	const normalized = path.posix.normalize(toPosix(value));
+	if (!path.posix.isAbsolute(normalized)) {
+		throw new Error(`${name} must be an absolute workspace path`);
+	}
+	return normalized;
+}
+
+function assertInsideWorkspace(workspaceRoot: string, candidate: string): string {
+	const relative = path.posix.relative(workspaceRoot, candidate);
+	if (relative === '' || (!relative.startsWith('..') && !path.posix.isAbsolute(relative))) {
+		return candidate;
+	}
+	throw new Error(`Path is outside workspace: ${candidate}`);
 }

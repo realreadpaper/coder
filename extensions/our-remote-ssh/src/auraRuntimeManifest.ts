@@ -44,20 +44,20 @@ export const defaultAuraRuntimeManifest: AuraRuntimeManifest = parseAuraRuntimeM
 			platforms: {
 				'linux-x64': {
 					version: '0.128.0',
-					officialUrl: '',
+					officialUrl: 'https://registry.npmjs.org/@openai/codex/-/codex-0.128.0-linux-x64.tgz',
 					mirrorUrl: '',
 					sha256: codexFallbackSha256,
 					size: 0,
-					binPath: 'bin/codex',
+					binPath: 'package/vendor/x86_64-unknown-linux-musl/codex/codex',
 					bundledPath: 'runtimes/codex/0.128.0-linux-x64.tar.gz'
 				},
 				'linux-arm64': {
 					version: '0.128.0',
-					officialUrl: '',
+					officialUrl: 'https://registry.npmjs.org/@openai/codex/-/codex-0.128.0-linux-arm64.tgz',
 					mirrorUrl: '',
 					sha256: codexFallbackSha256,
 					size: 0,
-					binPath: 'bin/codex',
+					binPath: 'package/vendor/aarch64-unknown-linux-musl/codex/codex',
 					bundledPath: 'runtimes/codex/0.128.0-linux-arm64.tar.gz'
 				}
 			}

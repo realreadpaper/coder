@@ -23,7 +23,8 @@ suite('Aura runtime binding', () => {
 					}
 				}
 			},
-			requiredVersion: '0.128.0'
+			requiredVersion: '0.128.0',
+			binRelativePath: 'package/vendor/x86_64-unknown-linux-musl/codex/codex'
 		});
 		assert.deepStrictEqual(plan, {
 			action: 'use-existing',
@@ -38,12 +39,25 @@ suite('Aura runtime binding', () => {
 			platformKey: 'linux-x64',
 			configuredRemoteCliPath: '/custom/bin/codex',
 			registry: { runtimes: {} },
-			requiredVersion: '0.128.0'
+			requiredVersion: '0.128.0',
+			binRelativePath: 'package/vendor/x86_64-unknown-linux-musl/codex/codex'
 		});
 		assert.deepStrictEqual(plan, {
 			action: 'use-configured',
 			binPath: '/custom/bin/codex'
 		});
+	});
+
+	test('rejects relative remoteCliPath configuration', () => {
+		assert.throws(() => createAuraRuntimeEnsurePlan({
+			providerId: 'codex',
+			home: '/home/user',
+			platformKey: 'linux-x64',
+			configuredRemoteCliPath: 'codex',
+			registry: { runtimes: {} },
+			requiredVersion: '0.128.0',
+			binRelativePath: 'package/vendor/x86_64-unknown-linux-musl/codex/codex'
+		}), /absolute remote path/);
 	});
 
 	test('plans install when registry is missing', () => {
@@ -53,9 +67,10 @@ suite('Aura runtime binding', () => {
 			platformKey: 'linux-x64',
 			configuredRemoteCliPath: '',
 			registry: { runtimes: {} },
-			requiredVersion: '0.128.0'
+			requiredVersion: '0.128.0',
+			binRelativePath: 'package/vendor/x86_64-unknown-linux-musl/codex/codex'
 		});
 		assert.strictEqual(plan.action, 'install');
-		assert.strictEqual(plan.target.binPath, '/home/user/.aura-code/runtimes/codex/0.128.0-linux-x64/bin/codex');
+		assert.strictEqual(plan.target.binPath, '/home/user/.aura-code/runtimes/codex/0.128.0-linux-x64/package/vendor/x86_64-unknown-linux-musl/codex/codex');
 	});
 });

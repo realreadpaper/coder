@@ -63,4 +63,10 @@ suite('Codex task runner', () => {
 			'Clean the local Codex cache'
 		]);
 	});
+
+	test('does not prepend the current directory when codex is resolved from PATH', () => {
+		const source = require('fs').readFileSync(require('path').join(__dirname, '..', 'codexTaskRunner.ts'), 'utf8');
+
+		assert.ok(source.includes('binDir === \'.\' ? process.env.PATH : extendPath(binDir)'));
+	});
 });

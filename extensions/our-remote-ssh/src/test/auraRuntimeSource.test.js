@@ -21,7 +21,8 @@ suite('Aura runtime source', () => {
 			bundledExists: true,
 			officialUrl: 'https://official.invalid/codex.tar.gz',
 			mirrorUrl: 'https://mirror.invalid/codex.tar.gz',
-			networkAvailable: true
+			networkAvailable: true,
+			remoteDownloadEnabled: true
 		});
 		assert.deepStrictEqual(source, {
 			kind: 'cache',
@@ -29,7 +30,7 @@ suite('Aura runtime source', () => {
 		});
 	});
 
-	test('uses official URL before mirror when cache is missing', () => {
+	test('uses bundled runtime before network downloads', () => {
 		const source = chooseAuraRuntimeSource({
 			providerId: 'codex',
 			platformKey: 'linux-x64',
@@ -40,7 +41,48 @@ suite('Aura runtime source', () => {
 			bundledExists: true,
 			officialUrl: 'https://official.invalid/codex.tar.gz',
 			mirrorUrl: 'https://mirror.invalid/codex.tar.gz',
-			networkAvailable: true
+			networkAvailable: true,
+			remoteDownloadEnabled: true
+		});
+		assert.deepStrictEqual(source, {
+			kind: 'bundled',
+			path: '/app/runtimes/codex/0.128.0-linux-x64.tar.gz'
+		});
+	});
+
+	test('uses remote official URL when local sources are missing', () => {
+		const source = chooseAuraRuntimeSource({
+			providerId: 'codex',
+			platformKey: 'linux-x64',
+			version: '0.128.0',
+			cachePath: '/cache/codex/0.128.0-linux-x64.tar.gz',
+			cacheExists: false,
+			bundledPath: '/app/runtimes/codex/0.128.0-linux-x64.tar.gz',
+			bundledExists: false,
+			officialUrl: 'https://official.invalid/codex.tar.gz',
+			mirrorUrl: 'https://mirror.invalid/codex.tar.gz',
+			networkAvailable: true,
+			remoteDownloadEnabled: true
+		});
+		assert.deepStrictEqual(source, {
+			kind: 'remoteDownload',
+			url: 'https://official.invalid/codex.tar.gz'
+		});
+	});
+
+	test('uses local official URL before mirror when remote download is disabled', () => {
+		const source = chooseAuraRuntimeSource({
+			providerId: 'codex',
+			platformKey: 'linux-x64',
+			version: '0.128.0',
+			cachePath: '/cache/codex/0.128.0-linux-x64.tar.gz',
+			cacheExists: false,
+			bundledPath: '/app/runtimes/codex/0.128.0-linux-x64.tar.gz',
+			bundledExists: false,
+			officialUrl: 'https://official.invalid/codex.tar.gz',
+			mirrorUrl: 'https://mirror.invalid/codex.tar.gz',
+			networkAvailable: true,
+			remoteDownloadEnabled: false
 		});
 		assert.deepStrictEqual(source, {
 			kind: 'download',
@@ -60,7 +102,8 @@ suite('Aura runtime source', () => {
 			bundledExists: true,
 			officialUrl: 'https://official.invalid/codex.tar.gz',
 			mirrorUrl: 'https://mirror.invalid/codex.tar.gz',
-			networkAvailable: false
+			networkAvailable: false,
+			remoteDownloadEnabled: true
 		});
 		assert.deepStrictEqual(source, {
 			kind: 'bundled',
@@ -79,7 +122,8 @@ suite('Aura runtime source', () => {
 			bundledExists: false,
 			officialUrl: '',
 			mirrorUrl: '',
-			networkAvailable: false
+			networkAvailable: false,
+			remoteDownloadEnabled: true
 		}), /No Aura runtime source available for codex 0.128.0 linux-arm64/);
 	});
 

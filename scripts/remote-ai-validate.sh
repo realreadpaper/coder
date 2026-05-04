@@ -14,7 +14,7 @@ REMOTE_PATH="${REMOTE_AI_VALIDATE_REMOTE_PATH:-/home/hejianglong/remote-ai-manua
 COMMIT="${REMOTE_AI_VALIDATE_COMMIT:-dev-compat}"
 USER_DATA_DIR="${REMOTE_AI_VALIDATE_USER_DATA_DIR:-/tmp/remote-ai-validate-user-data}"
 LOGS_DIR="${REMOTE_AI_VALIDATE_LOGS_DIR:-/tmp/remote-ai-validate-logs}"
-CODEX_EXTENSIONS_DIR="${REMOTE_AI_VALIDATE_EXTENSIONS_DIR:-$HOME/.vscode/extensions}"
+CODEX_EXTENSIONS_DIR="${REMOTE_AI_VALIDATE_EXTENSIONS_DIR:-$HOME/.vscode-oss/extensions}"
 LOCAL_CODEX_CLI="${REMOTE_AI_VALIDATE_CODEX_CLI:-$(command -v codex || true)}"
 REMOTE_CODEX_CLI="${REMOTE_AI_VALIDATE_REMOTE_CODEX_CLI:-}"
 AURA_RUNTIME_FALLBACK_VERSION="${AURA_RUNTIME_FALLBACK_VERSION:-0.128.0}"
@@ -35,7 +35,7 @@ REMOTE_AI_VALIDATE_REMOTE_PATH       Remote workspace, default: /home/hejianglon
 REMOTE_AI_VALIDATE_USER_DATA_DIR     Local user data dir, default: /tmp/remote-ai-validate-user-data
 REMOTE_AI_VALIDATE_LOGS_DIR          Local logs dir, default: /tmp/remote-ai-validate-logs
 REMOTE_AI_VALIDATE_COMMIT            RemoteAI server commit id, default: dev-compat
-REMOTE_AI_VALIDATE_EXTENSIONS_DIR    Local extensions dir, default: ~/.vscode/extensions
+REMOTE_AI_VALIDATE_EXTENSIONS_DIR    Local extensions dir, default: ~/.vscode-oss/extensions
 REMOTE_AI_VALIDATE_CODEX_CLI         Local Codex CLI path retained for local fallback checks, default: PATH codex
 REMOTE_AI_VALIDATE_REMOTE_CODEX_CLI  Remote Linux Codex CLI path. Empty prepares one on the SSH host
 EOF

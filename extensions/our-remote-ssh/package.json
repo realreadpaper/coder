@@ -1,6 +1,6 @@
 {
 	"name": "remote-ssh",
-	"displayName": "RemoteAI SSH",
+	"displayName": "Aura SSH",
 	"publisher": "our",
 	"version": "0.1.0",
 	"license": "MIT",
@@ -34,26 +34,26 @@
 			{
 				"command": "opensshremotes.openEmptyWindowInCurrentWindow",
 				"title": "Remote-SSH: Connect to Host",
-				"category": "RemoteAI"
+				"category": "Aura"
 			},
 			{
 				"command": "remoteai.ssh.connectToHost",
 				"title": "Connect to SSH Host",
-				"category": "RemoteAI"
+				"category": "Aura"
 			},
 			{
 				"command": "remoteai.ssh.openDashboard",
 				"title": "Open SSH Dashboard",
-				"category": "RemoteAI"
+				"category": "Aura"
 			},
 			{
 				"command": "remoteai.ssh.showDiagnostics",
 				"title": "Show Diagnostics",
-				"category": "RemoteAI"
+				"category": "Aura"
 			}
 		],
 		"configuration": {
-			"title": "RemoteAI SSH",
+			"title": "Aura SSH",
 			"properties": {
 				"remoteai.ssh.serverTarballPath": {
 					"type": "string",
@@ -63,7 +63,7 @@
 				"remoteai.ssh.serverManifestPath": {
 					"type": "string",
 					"default": "",
-					"description": "Local path to a RemoteAI release manifest. Used to select commit, tarball and sha256 when serverTarballPath is not set."
+					"description": "Local path to an Aura release manifest. Used to select commit, tarball and sha256 when serverTarballPath is not set."
 				},
 				"remoteai.ssh.commit": {
 					"type": "string",
@@ -93,7 +93,33 @@
 				"aura.runtime.networkEnabled": {
 					"type": "boolean",
 					"default": true,
-					"description": "Allow Aura Code to download AI runtimes when local cache and bundled runtime packages are missing."
+					"description": "Allow Aura Code to use network runtime sources when local cache and bundled runtime packages are missing."
+				},
+				"aura.runtime.remoteDownloadEnabled": {
+					"type": "boolean",
+					"default": true,
+					"description": "Allow the SSH server to download AI runtime packages directly from the runtime manifest URL before falling back to local download and upload."
+				},
+				"remoteai.codex.credentialsSyncEnabled": {
+					"type": "boolean",
+					"default": true,
+					"description": "Automatically sync local Codex auth.json and config.toml to the SSH server for remote Codex sessions."
+				},
+				"remoteai.codex.credentialsOverwrite": {
+					"type": "boolean",
+					"default": false,
+					"description": "Overwrite existing remote Codex auth.json and config.toml during credential sync. Disabled by default to preserve remote accounts."
+				},
+				"remoteai.codex.remoteCliPath": {
+					"type": "string",
+					"default": "",
+					"description": "Explicit Codex CLI path on the SSH server. Leave empty to let Aura Code Runtime Manager install or select the managed runtime."
+				},
+				"remoteai.codex.sandboxMode": {
+					"type": "string",
+					"enum": ["read-only", "workspace-write", "danger-full-access"],
+					"default": "danger-full-access",
+					"description": "Sandbox mode passed to the remote Codex CLI wrapper."
 				}
 			}
 		},
@@ -106,7 +132,7 @@
 					"separator": "/",
 					"tildify": true,
 					"workspaceSuffix": "SSH",
-					"workspaceTooltip": "RemoteAI SSH"
+					"workspaceTooltip": "Aura SSH"
 				}
 			}
 		]

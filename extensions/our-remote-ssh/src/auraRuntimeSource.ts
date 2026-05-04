@@ -10,8 +10,9 @@ import * as path from 'path';
 
 export type AuraRuntimeSource =
 	| { readonly kind: 'cache'; readonly path: string }
-	| { readonly kind: 'download'; readonly url: string; readonly cachePath: string }
-	| { readonly kind: 'bundled'; readonly path: string };
+	| { readonly kind: 'bundled'; readonly path: string }
+	| { readonly kind: 'remoteDownload'; readonly url: string }
+	| { readonly kind: 'download'; readonly url: string; readonly cachePath: string };
 
 export interface AuraRuntimeSourceOptions {
 	readonly providerId: string;
@@ -24,20 +25,25 @@ export interface AuraRuntimeSourceOptions {
 	readonly officialUrl: string;
 	readonly mirrorUrl: string;
 	readonly networkAvailable: boolean;
+	readonly remoteDownloadEnabled: boolean;
 }
 
 export function chooseAuraRuntimeSource(options: AuraRuntimeSourceOptions): AuraRuntimeSource {
 	if (options.cacheExists) {
 		return { kind: 'cache', path: options.cachePath };
 	}
+	if (options.bundledExists) {
+		return { kind: 'bundled', path: options.bundledPath };
+	}
+	const downloadUrl = options.officialUrl || options.mirrorUrl;
+	if (options.remoteDownloadEnabled && options.networkAvailable && downloadUrl) {
+		return { kind: 'remoteDownload', url: downloadUrl };
+	}
 	if (options.networkAvailable && options.officialUrl) {
 		return { kind: 'download', url: options.officialUrl, cachePath: options.cachePath };
 	}
 	if (options.networkAvailable && options.mirrorUrl) {
 		return { kind: 'download', url: options.mirrorUrl, cachePath: options.cachePath };
-	}
-	if (options.bundledExists) {
-		return { kind: 'bundled', path: options.bundledPath };
 	}
 	throw new Error(`No Aura runtime source available for ${options.providerId} ${options.version} ${options.platformKey}`);
 }

@@ -68,6 +68,17 @@ suite('Remote Codex runner', () => {
 		);
 	});
 
+	test('rejects last-message output paths outside the workspace', () => {
+		assert.throws(() => createRemoteCodexTaskPlan({
+			workspaceRoot: '/home/user/project',
+			prompt: 'Summarize',
+			outputLastMessagePath: '/home/user/.codex/last-message.md',
+			platform: 'linux',
+			arch: 'x64',
+			globalStoragePath: '/home/user/.remote-ai-server/User/globalStorage/our.ai-codex-remote-bridge'
+		}), /outside workspace/);
+	});
+
 	test('does not expose removed synchronization concepts', () => {
 		const sourcePath = path.join(__dirname, '../../out/remoteCodexRunner.js');
 		const source = require('fs').readFileSync(sourcePath, 'utf8');

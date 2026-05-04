@@ -7,6 +7,7 @@ const assert = require('assert');
 const path = require('path');
 const {
 	buildCodexSshWrapperScript,
+	buildUnavailableCodexSshWrapperScript,
 	createCodexSshWrapperPlan,
 	isManagedCodexSshWrapper
 } = require('../../out/codexUiWrapper');
@@ -34,8 +35,9 @@ suite('RemoteAI Codex UI wrapper', () => {
 			'aura-code-codex-ssh-dev'
 		));
 		assert.match(plan.script, /ssh "\$HOST" "\$cmd"/);
-		assert.match(plan.script, /danger-full-access/);
-		assert.match(plan.script, /dangerously-bypass-approvals-and-sandbox/);
+		assert.match(plan.script, /AURA_CODE_WORKSPACE_ROOT/);
+		assert.match(plan.script, /cmd="REMOTE_PATH=\$\(quote "\$REMOTE_PATH"\); REMOTE_CODEX_CLI=\$\(quote "\$REMOTE_CODEX_CLI"\);/);
+		assert.match(plan.script, /--cd/);
 	});
 
 	test('does not create a wrapper plan for local file workspaces', () => {
@@ -66,6 +68,19 @@ suite('RemoteAI Codex UI wrapper', () => {
 		assert.match(script, /REMOTE_CODEX_CLI='\/home\/user\/bin\/codex'\\''s'/);
 	});
 
+	test('does not inject exec-only flags when OpenAI starts the app-server', () => {
+		const script = buildCodexSshWrapperScript({
+			host: 'dev',
+			remotePath: '/home/user/project',
+			remoteCliPath: '/home/user/bin/codex',
+			sandboxMode: 'danger-full-access'
+		});
+
+		assert.match(script, /if \[ "\$\{1:-\}" = "app-server" \]/);
+		assert.ok(script.includes('exec \\"$REMOTE_CODEX_CLI\\"'));
+		assert.match(script, /cmd\+=" --cd \\"\$REMOTE_PATH\\"/);
+	});
+
 	test('recognizes only RemoteAI managed wrapper paths', () => {
 		assert.strictEqual(isManagedCodexSshWrapper('/tmp/state/codex-ui/aura-code-codex-ssh-dev'), true);
 		assert.strictEqual(isManagedCodexSshWrapper('/tmp/state/codex-ui/remote-ai-codex-ssh-dev'), true);
@@ -87,5 +102,20 @@ suite('RemoteAI Codex UI wrapper', () => {
 		assert.ok(plan.wrapperPath.endsWith('/codex-ui/aura-code-codex-ssh-dev'));
 		assert.strictEqual(isManagedCodexSshWrapper('/tmp/codex-ui/aura-code-codex-ssh-dev'), true);
 		assert.strictEqual(isManagedCodexSshWrapper('/tmp/codex-ui/remote-ai-codex-ssh-dev'), true);
+	});
+
+	test('can generate a remote-only blocking wrapper when runtime binding fails', () => {
+		const script = buildUnavailableCodexSshWrapperScript({
+			host: 'dev',
+			remotePath: '/home/user/project',
+			reason: 'runtime probe failed'
+		});
+
+		assert.match(script, /exec ssh "\$HOST" "\$cmd"/);
+		assert.match(script, /AURA_CODE_WORKSPACE_ROOT/);
+		assert.match(script, /cmd="REMOTE_PATH=\$\(quote "\$REMOTE_PATH"\); REASON=\$\(quote "\$REASON"\);/);
+		assert.match(script, /Aura Codex runtime is unavailable/);
+		assert.doesNotMatch(script, /exec codex/);
+		assert.doesNotMatch(script, /REMOTE_CODEX_CLI='codex'/);
 	});
 });

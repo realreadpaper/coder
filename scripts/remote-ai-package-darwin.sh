@@ -28,6 +28,10 @@ SKIP_BUILD="${REMOTE_AI_DARWIN_SKIP_BUILD:-0}"
 APP_NAME="$(node -p "require('./product.json').nameLong + '.app'")"
 CLIENT_DIR="$OUT_ROOT/client"
 ZIP_PATH="$CLIENT_DIR/remote-ai-darwin-$VSCODE_ARCH-unsigned.zip"
+BUNDLED_RELEASES_SOURCE="$OUT_ROOT/remote-releases"
+APP_RELEASES_DIR="$APP_ROOT/$APP_NAME/Contents/Resources/remote-releases"
+AURA_RUNTIME_SOURCE="$ROOT/resources/aura-code"
+APP_AURA_RUNTIME_DIR="$APP_ROOT/$APP_NAME/Contents/Resources/aura-code"
 
 if [[ "$SKIP_BUILD" != "1" ]]; then
 	echo "[remote-ai-darwin] downloading Electron for $VSCODE_ARCH..."
@@ -36,9 +40,32 @@ if [[ "$SKIP_BUILD" != "1" ]]; then
 	npm run gulp "vscode-darwin-$VSCODE_ARCH-min"
 fi
 
+if [[ "${REMOTE_AI_SKIP_RUNTIME_BUNDLE:-0}" != "1" ]]; then
+	echo "[remote-ai-darwin] preparing Aura Code runtime bundles..."
+	scripts/remote-ai-package-runtimes.sh
+fi
+
 if [[ ! -d "$APP_ROOT/$APP_NAME" ]]; then
 	echo "macOS app is missing: $APP_ROOT/$APP_NAME" >&2
 	exit 1
+fi
+
+if [[ ! -d "$BUNDLED_RELEASES_SOURCE" ]]; then
+	echo "Bundled remote server releases are missing: $BUNDLED_RELEASES_SOURCE" >&2
+	echo "Run scripts/remote-ai-package-release.sh before packaging the macOS app." >&2
+	exit 1
+fi
+
+echo "[remote-ai-darwin] bundling remote server releases..."
+rm -rf "$APP_RELEASES_DIR"
+mkdir -p "$(dirname "$APP_RELEASES_DIR")"
+ditto "$BUNDLED_RELEASES_SOURCE" "$APP_RELEASES_DIR"
+
+if [[ -d "$AURA_RUNTIME_SOURCE" ]]; then
+	echo "[remote-ai-darwin] bundling Aura Code runtimes..."
+	rm -rf "$APP_AURA_RUNTIME_DIR"
+	mkdir -p "$(dirname "$APP_AURA_RUNTIME_DIR")"
+	ditto "$AURA_RUNTIME_SOURCE" "$APP_AURA_RUNTIME_DIR"
 fi
 
 mkdir -p "$CLIENT_DIR"

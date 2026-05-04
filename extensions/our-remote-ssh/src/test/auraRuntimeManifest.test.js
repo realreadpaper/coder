@@ -14,7 +14,8 @@ suite('Aura runtime manifest', () => {
 	test('provides Codex 0.128.0 fallback for linux x64', () => {
 		const platform = selectProviderPlatform(defaultAuraRuntimeManifest, 'codex', 'linux-x64');
 		assert.strictEqual(platform.version, '0.128.0');
-		assert.strictEqual(platform.binPath, 'bin/codex');
+		assert.strictEqual(platform.officialUrl, 'https://registry.npmjs.org/@openai/codex/-/codex-0.128.0-linux-x64.tgz');
+		assert.strictEqual(platform.binPath, 'package/vendor/x86_64-unknown-linux-musl/codex/codex');
 		assert.strictEqual(platform.bundledPath, 'runtimes/codex/0.128.0-linux-x64.tar.gz');
 	});
 

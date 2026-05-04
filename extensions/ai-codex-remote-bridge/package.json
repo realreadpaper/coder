@@ -58,7 +58,7 @@
 				"remoteai.codex.localCliPath": {
 					"type": "string",
 					"default": "",
-					"description": "Local Codex CLI path used only for non-remote workspaces. Leave empty to resolve codex from the local PATH."
+					"description": "Local Codex CLI path used only for local file workspaces. Leave empty to resolve codex from the local PATH."
 				},
 				"remoteai.codex.remoteCliPath": {
 					"type": "string",

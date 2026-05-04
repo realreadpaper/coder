@@ -39,7 +39,7 @@ export interface DiagnosticsReportInput {
 
 export function createDiagnosticsReport(input: DiagnosticsReportInput): string {
 	const lines = [
-		'# RemoteAI Diagnostics',
+		'# Aura Diagnostics',
 		'',
 		'## Runtime',
 		`- Generated: ${input.now}`,

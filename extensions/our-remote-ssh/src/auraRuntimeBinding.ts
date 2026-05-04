@@ -18,9 +18,13 @@ export function createAuraRuntimeEnsurePlan(options: {
 	readonly configuredRemoteCliPath: string;
 	readonly registry: AuraRuntimeRegistry;
 	readonly requiredVersion: string;
+	readonly binRelativePath: string;
 }): AuraRuntimeEnsurePlan {
 	const configured = options.configuredRemoteCliPath.trim();
 	if (configured) {
+		if (!configured.startsWith('/')) {
+			throw new Error(`remoteai.codex.remoteCliPath must be an absolute remote path, got: ${configured}`);
+		}
 		return { action: 'use-configured', binPath: configured };
 	}
 	const existing = options.registry.runtimes[options.providerId];
@@ -32,7 +36,8 @@ export function createAuraRuntimeEnsurePlan(options: {
 		target: createCodexRuntimeInstallTarget({
 			home: options.home,
 			platformKey: options.platformKey,
-			version: options.requiredVersion
+			version: options.requiredVersion,
+			binRelativePath: options.binRelativePath
 		})
 	};
 }

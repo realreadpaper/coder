@@ -32,7 +32,7 @@ export function renderDashboardHtml(options: DashboardRenderOptions): string {
 	<meta charset="UTF-8">
 	<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'nonce-${nonce}'; script-src 'nonce-${nonce}';">
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
-	<title>RemoteAI SSH</title>
+	<title>Aura SSH</title>
 	<style nonce="${nonce}">
 		:root {
 			color-scheme: light dark;
@@ -239,7 +239,7 @@ export function renderDashboardHtml(options: DashboardRenderOptions): string {
 	<div class="shell">
 		<header>
 			<div>
-				<h1>RemoteAI SSH</h1>
+				<h1>Aura SSH</h1>
 			</div>
 			<div class="status" aria-live="polite">
 				<span class="status-dot"></span>

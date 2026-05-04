@@ -57,7 +57,7 @@ export type OpenTunnelFn = (host: string, remotePort: number) => Promise<Disposa
 export async function resolveSshRemoteAuthority(authority: string, options: ResolveSshRemoteOptions): Promise<ResolvedSshRemote> {
 	const target = parseSshRemoteAuthority(authority);
 	if (!options.localTarballPath && !options.installServer) {
-		throw new Error('RemoteAI SSH requires remoteai.ssh.serverTarballPath until server download support is configured');
+		throw new Error('Aura SSH requires remoteai.ssh.serverTarballPath until server download support is configured');
 	}
 
 	const installServer = options.installServer ?? ((host, commit) => ensureRemoteServerInstalled(host, commit, options.auditLog, {

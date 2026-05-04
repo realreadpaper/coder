@@ -33,7 +33,7 @@ suite('RemoteAI dashboard renderer', () => {
 		assert.match(html, /type: 'diagnostics'/);
 		assert.match(html, /datalist id="sshHosts"/);
 		assert.match(html, /history-item/);
-		assert.match(html, /RemoteAI SSH/);
+		assert.match(html, /Aura SSH/);
 		assert.match(html, /dev-compat/);
 	});
 

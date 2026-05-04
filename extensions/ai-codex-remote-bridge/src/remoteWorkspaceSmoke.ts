@@ -23,6 +23,7 @@ export interface RemoteWorkspaceSmokeResult {
 }
 
 export async function runRemoteWorkspaceSmoke(workspaceRoot: string): Promise<RemoteWorkspaceSmokeResult> {
+	assertRemoteExtensionHost();
 	const smokeDir = path.join(workspaceRoot, '.remote-ai-smoke');
 	await fs.promises.mkdir(smokeDir, { recursive: true });
 
@@ -51,6 +52,12 @@ export async function runRemoteWorkspaceSmoke(workspaceRoot: string): Promise<Re
 	};
 	await fs.promises.writeFile(reportPath, `${JSON.stringify(result, null, 2)}\n`, 'utf8');
 	return result;
+}
+
+export function assertRemoteExtensionHost(remoteName = vscode.env.remoteName): void {
+	if (remoteName !== 'ssh-remote') {
+		throw new Error('RemoteAI Codex bridge only runs inside an SSH remote workspace');
+	}
 }
 
 async function runTerminalPwdSmoke(workspaceRoot: string, resultPath: string): Promise<string> {

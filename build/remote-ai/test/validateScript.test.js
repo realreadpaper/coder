@@ -21,6 +21,7 @@ suite('RemoteAI validation launcher', () => {
 		const script = fs.readFileSync(path.join(__dirname, '../../../scripts/remote-ai-validate.sh'), 'utf8');
 
 		assert.match(script, /REMOTE_AI_VALIDATE_EXTENSIONS_DIR/);
+		assert.match(script, /\.vscode-oss\/extensions/);
 		assert.match(script, /codexExtensionPatch\.js/);
 		assert.match(script, /--extensions-dir/);
 	});

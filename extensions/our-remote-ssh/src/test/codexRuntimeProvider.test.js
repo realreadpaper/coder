@@ -14,10 +14,11 @@ suite('Codex runtime provider', () => {
 		const target = createCodexRuntimeInstallTarget({
 			home: '/home/user',
 			platformKey: 'linux-x64',
-			version: '0.128.0'
+			version: '0.128.0',
+			binRelativePath: 'package/vendor/x86_64-unknown-linux-musl/codex/codex'
 		});
 		assert.strictEqual(target.installDir, '/home/user/.aura-code/runtimes/codex/0.128.0-linux-x64');
-		assert.strictEqual(target.binPath, '/home/user/.aura-code/runtimes/codex/0.128.0-linux-x64/bin/codex');
+		assert.strictEqual(target.binPath, '/home/user/.aura-code/runtimes/codex/0.128.0-linux-x64/package/vendor/x86_64-unknown-linux-musl/codex/codex');
 		assert.strictEqual(target.uploadPath, '/home/user/.aura-code/upload/codex-0.128.0-linux-x64.tar.gz');
 	});
 

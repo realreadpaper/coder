@@ -18,6 +18,12 @@ export interface CodexSshWrapperScriptOptions {
 	readonly sandboxMode: 'read-only' | 'workspace-write' | 'danger-full-access';
 }
 
+export interface UnavailableCodexSshWrapperScriptOptions {
+	readonly host: string;
+	readonly remotePath: string;
+	readonly reason: string;
+}
+
 export interface CodexSshWrapperPlanOptions {
 	readonly globalStoragePath: string;
 	readonly workspaceFolderUri: UriLike | undefined;
@@ -65,10 +71,31 @@ SANDBOX_MODE=${shellSingleQuote(options.sandboxMode)}
 
 quote() { printf '%q' "$1"; }
 
-cmd="cd $(quote "$REMOTE_PATH") && exec $(quote "$REMOTE_CODEX_CLI") --sandbox $(quote "$SANDBOX_MODE") --dangerously-bypass-approvals-and-sandbox"
+cmd="REMOTE_PATH=$(quote "$REMOTE_PATH"); REMOTE_CODEX_CLI=$(quote "$REMOTE_CODEX_CLI"); if [ ! -d \\"\$REMOTE_PATH\\" ]; then echo \\"Aura workspace does not exist: \$REMOTE_PATH\\" >&2; exit 90; fi; REMOTE_PATH=\\$(cd \\"\$REMOTE_PATH\\" && pwd -P); cd \\"\$REMOTE_PATH\\"; export AURA_CODE_WORKSPACE_ROOT=\\"\$REMOTE_PATH\\"; exec \\"\$REMOTE_CODEX_CLI\\""
+if [ "\${1:-}" = "app-server" ]; then
+	:
+else
+	cmd+=" --cd \\"\$REMOTE_PATH\\" --sandbox $(quote "$SANDBOX_MODE") --dangerously-bypass-approvals-and-sandbox"
+fi
 for arg in "$@"; do
 	cmd+=" $(quote "$arg")"
 done
+
+exec ssh "$HOST" "$cmd"
+`;
+}
+
+export function buildUnavailableCodexSshWrapperScript(options: UnavailableCodexSshWrapperScriptOptions): string {
+	return `#!/usr/bin/env bash
+set -euo pipefail
+
+HOST=${shellSingleQuote(options.host)}
+REMOTE_PATH=${shellSingleQuote(options.remotePath)}
+REASON=${shellSingleQuote(options.reason)}
+
+quote() { printf '%q' "$1"; }
+
+cmd="REMOTE_PATH=$(quote "$REMOTE_PATH"); REASON=$(quote "$REASON"); if [ ! -d \\"\$REMOTE_PATH\\" ]; then echo \\"Aura workspace does not exist: \$REMOTE_PATH\\" >&2; exit 90; fi; REMOTE_PATH=\\$(cd \\"\$REMOTE_PATH\\" && pwd -P); cd \\"\$REMOTE_PATH\\"; export AURA_CODE_WORKSPACE_ROOT=\\"\$REMOTE_PATH\\"; echo \\"Aura Codex runtime is unavailable: \$REASON\\" >&2; exit 91"
 
 exec ssh "$HOST" "$cmd"
 `;

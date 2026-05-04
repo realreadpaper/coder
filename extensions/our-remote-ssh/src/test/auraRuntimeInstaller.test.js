@@ -7,6 +7,7 @@ const assert = require('assert');
 const {
 	buildAuraRuntimeProbeScript,
 	buildAuraRuntimeInstallScript,
+	buildAuraRuntimeRemoteDownloadScript,
 	createAuraRuntimeUploadPlan,
 	parseAuraRuntimeProbeOutput
 } = require('../../out/auraRuntimeInstaller');
@@ -48,6 +49,16 @@ suite('Aura runtime installer scripts', () => {
 		assert.match(script, /"\$tmp_dir\/\$bin_relative" --version/);
 		assert.match(script, /registry.json/);
 		assert.match(script, /current/);
+	});
+
+	test('remote download script uses curl or wget', () => {
+		const script = buildAuraRuntimeRemoteDownloadScript({
+			url: 'https://registry.npmjs.org/@openai/codex/-/codex-0.128.0-linux-x64.tgz',
+			remotePath: '/home/user/.aura-code/upload/codex-0.128.0-linux-x64.tar.gz'
+		});
+		assert.match(script, /curl -fL/);
+		assert.match(script, /wget -O/);
+		assert.match(script, /aura-runtime-download=ok/);
 	});
 
 	test('creates remote upload plan under ~/.aura-code/upload', () => {

@@ -1069,3 +1069,196 @@
 .monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlide .getting-started-checkbox {
 	border-color: var(--vscode-checkbox-border) !important;
 }
+
+.monaco-workbench .part.editor > .content .gettingStartedContainer.aura-code-welcome .gettingStartedSlideCategories {
+	padding: 0 40px;
+}
+
+.monaco-workbench .part.editor > .content .gettingStartedContainer.aura-code-welcome .gettingStartedSlideCategories > .gettingStartedCategoriesContainer.aura-code-start {
+	display: grid;
+	width: min(920px, 100%);
+	height: 100%;
+	max-width: none;
+	margin: 0 auto;
+	grid-template-columns: 1fr;
+	grid-template-rows: minmax(150px, 26vh) auto minmax(120px, auto) 1fr;
+	grid-template-areas:
+		"header"
+		"left-column"
+		"right-column"
+		"footer";
+	row-gap: 30px;
+	align-content: start;
+}
+
+.monaco-workbench .part.editor > .content .gettingStartedContainer.aura-code-welcome.width-constrained .gettingStartedSlideCategories > .gettingStartedCategoriesContainer.aura-code-start,
+.monaco-workbench .part.editor > .content .gettingStartedContainer.aura-code-welcome.height-constrained .gettingStartedSlideCategories > .gettingStartedCategoriesContainer.aura-code-start,
+.monaco-workbench .part.editor > .content .gettingStartedContainer.aura-code-welcome.height-constrained.width-constrained .gettingStartedSlideCategories > .gettingStartedCategoriesContainer.aura-code-start {
+	width: 100%;
+	grid-template-columns: 1fr;
+	grid-template-rows: minmax(92px, auto) auto auto 1fr;
+	grid-template-areas:
+		"header"
+		"left-column"
+		"right-column"
+		"footer";
+	row-gap: 22px;
+}
+
+.monaco-workbench .part.editor > .content .gettingStartedContainer.aura-code-welcome.width-constrained .gettingStartedSlideCategories > .gettingStartedCategoriesContainer.aura-code-start > .header,
+.monaco-workbench .part.editor > .content .gettingStartedContainer.aura-code-welcome.height-constrained .gettingStartedSlideCategories > .gettingStartedCategoriesContainer.aura-code-start > .header {
+	display: block;
+}
+
+.monaco-workbench .part.editor > .content .gettingStartedContainer.aura-code-welcome .gettingStartedSlideCategories > .gettingStartedCategoriesContainer.aura-code-start > .header {
+	align-self: end;
+	padding-bottom: 18px;
+}
+
+.monaco-workbench .part.editor > .content .gettingStartedContainer.aura-code-welcome .aura-code-brand {
+	display: flex;
+	align-items: center;
+	gap: 14px;
+}
+
+.monaco-workbench .part.editor > .content .gettingStartedContainer.aura-code-welcome .aura-code-logo {
+	display: inline-block;
+	width: 34px;
+	height: 34px;
+	border-radius: 8px;
+	background: linear-gradient(135deg, var(--vscode-textLink-foreground), var(--vscode-foreground));
+	clip-path: polygon(50% 0, 92% 25%, 92% 75%, 50% 100%, 8% 75%, 8% 25%);
+	opacity: .95;
+}
+
+.monaco-workbench .part.editor > .content .gettingStartedContainer.aura-code-welcome h1.product-name {
+	font-size: 36px;
+	line-height: 44px;
+	font-weight: 700;
+	letter-spacing: 0;
+}
+
+.monaco-workbench .part.editor > .content .gettingStartedContainer.aura-code-welcome .index-list.start-container h2 {
+	display: none;
+}
+
+.monaco-workbench .part.editor > .content .gettingStartedContainer.aura-code-welcome .index-list h2 {
+	font-size: 13px;
+	line-height: 20px;
+	margin-bottom: 10px;
+	color: var(--vscode-descriptionForeground);
+}
+
+.monaco-workbench .part.editor > .content .gettingStartedContainer.aura-code-welcome .gettingStartedSlideCategories > .gettingStartedCategoriesContainer.aura-code-start > .categories-column > div {
+	margin-bottom: 0;
+}
+
+.monaco-workbench .part.editor > .content .gettingStartedContainer.aura-code-welcome .gettingStartedSlideCategories > .gettingStartedCategoriesContainer.aura-code-start .index-list.start-container {
+	min-height: 0;
+}
+
+.monaco-workbench .part.editor > .content .gettingStartedContainer.aura-code-welcome .index-list.start-container ul {
+	display: flex;
+	flex-direction: row;
+	gap: 24px;
+	flex-wrap: wrap;
+}
+
+.monaco-workbench .part.editor > .content .gettingStartedContainer.aura-code-welcome .index-list.start-container li {
+	width: 258px;
+	height: 116px;
+}
+
+.monaco-workbench .part.editor > .content .gettingStartedContainer.aura-code-welcome .index-list.start-container .button-link {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	justify-content: space-between;
+	width: 100%;
+	height: 116px;
+	box-sizing: border-box;
+	margin: 0;
+	padding: 22px 24px 20px;
+	border: 1px solid var(--vscode-welcomePage-tileBorder, var(--vscode-contrastBorder));
+	border-radius: 8px;
+	background: var(--vscode-welcomePage-tileBackground);
+	color: var(--vscode-foreground);
+	text-decoration: none;
+	line-height: 26px;
+	font-size: 22px;
+	font-weight: 500;
+}
+
+.monaco-workbench .part.editor > .content .gettingStartedContainer.aura-code-welcome .index-list.start-container .button-link:hover {
+	background: var(--vscode-welcomePage-tileHoverBackground);
+	color: var(--vscode-foreground);
+	border-color: var(--vscode-focusBorder);
+}
+
+.monaco-workbench .part.editor > .content .gettingStartedContainer.aura-code-welcome .index-list.start-container .icon-widget {
+	top: 0;
+	font-size: 28px;
+	width: 32px;
+	padding-right: 0;
+	color: var(--vscode-foreground);
+	opacity: .86;
+}
+
+.monaco-workbench .part.editor > .content .gettingStartedContainer.aura-code-welcome.width-constrained .index-list.start-container ul {
+	flex-direction: column;
+	gap: 12px;
+}
+
+.monaco-workbench .part.editor > .content .gettingStartedContainer.aura-code-welcome.width-constrained .index-list.start-container li {
+	width: 100%;
+	height: 72px;
+}
+
+.monaco-workbench .part.editor > .content .gettingStartedContainer.aura-code-welcome.width-constrained .index-list.start-container .button-link {
+	height: 72px;
+	flex-direction: row;
+	align-items: center;
+	justify-content: flex-start;
+	gap: 14px;
+	padding: 0 18px;
+	font-size: 18px;
+}
+
+.monaco-workbench .part.editor > .content .gettingStartedContainer.aura-code-welcome.width-constrained .index-list.start-container .icon-widget {
+	font-size: 22px;
+	width: 24px;
+}
+
+.monaco-workbench .part.editor > .content .gettingStartedContainer.aura-code-welcome .index-list.recently-opened .recent-entry {
+	display: inline-flex;
+	align-items: baseline;
+	max-width: 100%;
+	gap: 22px;
+	color: var(--vscode-foreground);
+	text-decoration: none;
+	line-height: 20px;
+	margin: 0;
+	overflow: hidden;
+}
+
+.monaco-workbench .part.editor > .content .gettingStartedContainer.aura-code-welcome .index-list.recently-opened li {
+	line-height: 22px;
+	padding: 3px 0;
+}
+
+.monaco-workbench .part.editor > .content .gettingStartedContainer.aura-code-welcome .index-list.recently-opened .path,
+.monaco-workbench .part.editor > .content .gettingStartedContainer.aura-code-welcome .index-list.recently-opened .empty-recent {
+	color: var(--vscode-descriptionForeground);
+	font-size: 12px;
+}
+
+.monaco-workbench .part.editor > .content .gettingStartedContainer.aura-code-welcome .index-list.recently-opened .recent-name,
+.monaco-workbench .part.editor > .content .gettingStartedContainer.aura-code-welcome .index-list.recently-opened .path {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.monaco-workbench .part.editor > .content .gettingStartedContainer.aura-code-welcome .gettingStartedSlideCategories > .gettingStartedCategoriesContainer.aura-code-start > .footer {
+	display: none;
+}

@@ -60,6 +60,8 @@ OpenAI Codex VS Code 扩展仍运行在本地 UI extension host。RemoteAI 对�
 
 - 打开本地文件夹时，Codex 使用本机默认 CLI，直接操作本地工作区。
 - 通过 RemoteAI SSH 打开远程工作区时，RemoteAI 自动生成 SSH wrapper，并把 `chatgpt.cliExecutable` 指向这个 wrapper。
+- 其他 remote authority 不是 Aura SSH 工作区，Codex bridge 会拒绝执行，避免命令落到不明确的位置。
+- 状态栏会显示 `Aura Codex: local mode`、`Aura Codex: checking`、`Aura Codex: remote active` 或 `Aura Codex: remote unavailable`。点击状态项会打开诊断信息。
 - wrapper 会通过 `ssh <host>` 进入远程目录，然后启动远端 Linux Codex：
 
 ```sh
@@ -69,7 +71,7 @@ exec <remote-codex> --sandbox danger-full-access --dangerously-bypass-approvals-
 
 这样右侧 Codex 原生侧栏的 `pwd`、shell 工具和 patch 工具都发生在远程工作目录中，而不是在 macOS 本地尝试访问 `/home/...`。
 
-当 RemoteAI 刚切换 `chatgpt.cliExecutable` 时，会提示 `Reload Window`。需要重载窗口，让旧的本机 `codex app-server` 退出并由 wrapper 重新启动。否则已经运行中的 Codex 进程仍可能是旧的 `/usr/local/bin/codex app-server`。
+RemoteAI 在 SSH 连接和打开远程工作区之前完成 runtime 检查、凭据同步、wrapper 生成和 `chatgpt.cliExecutable` 配置。这样点击右侧 Codex 面板时不需要二次刷新；如果远端 runtime 绑定失败，wrapper 会变成只进入远端工作区并输出错误的阻断脚本，不会回退到本机 `codex`。
 
 #### RemoteAI Codex Bridge
 
@@ -80,7 +82,13 @@ exec <remote-codex> --sandbox danger-full-access --dangerously-bypass-approvals-
 - `RemoteAI: Apply Approved Codex Patch`
 - `RemoteAI: Inspect Remote Codex Workspace`
 
-这个入口适合自动化和 E2E 验证。它在 SSH 工作区中调用远端 Linux Codex CLI，使用：
+这个入口适合自动化和 E2E 验证。它按工作区上下文显式分流：
+
+- 本地 `file` 工作区调用本机 Codex CLI。`remoteai.codex.localCliPath` 为空时从本机 `PATH` 解析 `codex`；配置了绝对路径或带目录路径时才扩展对应 bin 目录。
+- Aura SSH 工作区调用远端 Linux Codex CLI，并强制 `--cd` 到远程工作区。
+- 非 Aura SSH 的其他 remote workspace 直接拒绝执行。
+
+SSH 工作区中的命令形态是：
 
 ```sh
 codex exec --cd <remote-workspace> --sandbox danger-full-access --dangerously-bypass-approvals-and-sandbox ...
@@ -95,20 +103,9 @@ codex exec --cd <remote-workspace> --sandbox danger-full-access --dangerously-by
 
 #### 远端 Codex CLI
 
-当前远端 Codex 由 `scripts/remote-ai-prepare-codex.sh` 准备。后续会迁移到 Aura Code Runtime Manager 统一管理，Codex、Claude Code 等 AI CLI 都会作为 provider runtime 接入。
+远端 Codex 由 Aura Code Runtime Manager 统一管理。连接 SSH 工作区时，Aura 会探测远端平台和 `~/.aura-code/runtimes/registry.json`，选择满足 manifest 的 Codex runtime；如果不存在或版本过旧，则按缓存、内置包、远端下载、本机下载后上传的顺序安装。
 
-现有脚本会：
-
-- 根据本机 Codex 版本选择 `@openai/codex@<version>-linux-x64` 或 `linux-arm64` 包。
-- 上传并解包到远端 `~/.remote-ai-server/codex/<version>-<platform>`。
-- 创建 `bin/codex` symlink。
-- 可同步本机 `~/.codex/config.toml` 和 `~/.codex/auth.json` 到远端。
-
-验证脚本会把远端路径写入：
-
-```json
-"remoteai.codex.remoteCliPath": "/home/hejianglong/.remote-ai-server/codex/0.128.0-linux-x64/bin/codex"
-```
+可以通过 `remoteai.codex.remoteCliPath` 指定远端绝对路径。该配置必须是远端绝对路径；相对值例如 `codex` 会被拒绝，防止 SSH wrapper 绑定失败后落回本机 PATH。
 
 #### Aura Code Runtime Manager
 
@@ -117,10 +114,11 @@ Aura Code 后续会把 Codex 视为内置 AI runtime，而不是一套只为 Cod
 - 在本地工作区使用本机 Codex，不启用 SSH wrapper。
 - 在 SSH 工作区检查远端 Linux runtime，不存在或版本过旧时自动安装。
 - 根据远端平台选择 `linux-x64` 或 `linux-arm64` 包。
-- 优先从官方来源下载 manifest 指定版本。
-- 官方下载失败时尝试 Aura Code 镜像或本机缓存。
-- 没有网络时上传安装包内置基础版本，例如 Codex `0.128.x`，确保核心能力可用。
-- 安装完成后生成 SSH wrapper，设置 `chatgpt.cliExecutable`，并提示 reload Codex app-server。
+- 获取 runtime 的顺序是：本机缓存、安装包内置包、远端服务器直接下载、本机下载后上传。
+- 远端直接下载使用 runtime manifest 中的 `officialUrl` / `mirrorUrl`，默认 Codex `0.128.0` 指向 OpenAI 发布在 npm registry 的 Linux 包。
+- 没有网络时仍可上传安装包内置基础版本，例如 Codex `0.128.x`，确保核心能力可用。
+- 打开 SSH 工作区后自动同步本机 Codex 凭据到远端 `~/.codex`，默认只复制 `auth.json` 和 `config.toml`，不复制 history、logs、sessions。
+- 安装完成后生成 SSH wrapper，并在打开远程工作区前设置 `chatgpt.cliExecutable`。
 
 推荐的远端目录会从现有 Codex 专用路径迁移为：
 
@@ -129,12 +127,12 @@ Aura Code 后续会把 Codex 视为内置 AI runtime，而不是一套只为 Cod
   runtimes/
     codex/
       0.128.0-linux-x64/
-        bin/codex
+        package/vendor/x86_64-unknown-linux-musl/codex/codex
       current -> 0.128.0-linux-x64
     registry.json
 ```
 
-版本选择由 runtime manifest 驱动。Aura Code 安装包会带一个基础 manifest 和离线兜底包；有网络时可以按 manifest 下载官方推荐版本，无网络时仍能上传内置 Codex `0.128.x` 到远端。以后接入 Claude Code 时，只新增 Claude Code provider adapter，下载、缓存、上传、远端 registry、版本检查、wrapper/bridge 绑定都复用同一套 Runtime Manager。
+版本选择由 runtime manifest 驱动。Aura Code 安装包会带一个基础 manifest 和离线兜底包；有网络时远端服务器可以按 manifest 自己下载官方推荐版本，本机也可以作为下载和上传兜底；无网络时仍能上传内置 Codex `0.128.x` 到远端。以后接入 Claude Code 时，只新增 Claude Code provider adapter，下载、缓存、上传、远端 registry、版本检查、凭据桥接、wrapper/bridge 绑定都复用同一套 Runtime Manager。
 
 #### 新电脑首次使用
 
@@ -156,10 +154,11 @@ Aura Code 后续会把 Codex 视为内置 AI runtime，而不是一套只为 Cod
 3. 远端 server 启动后，Code-OSS 进入 SSH 工作区，Explorer、终端、搜索、Git、LSP 等能力由远端 server / 远端 extension host 提供。
 4. 远端 server 包中包含 `our.ai-codex-remote-bridge`，所以命令式 Codex 能力会随 server 一起到远端。
 5. Aura Code Runtime Manager 检查远端 `~/.aura-code/runtimes` 中是否已有满足 manifest 的 Codex。
-6. 如果远端 Codex 不存在或版本过旧，Runtime Manager 先查本机缓存，再尝试官方下载，再尝试 Aura Code 镜像，最后使用安装包内置 Codex `0.128.x` 兜底。
-7. Runtime Manager 上传并解包 Codex 到远端，写入 `registry.json`，并把 `current` 指向可用版本。
-8. Aura Code 自动生成本机 SSH wrapper，并把本机 Codex 扩展的 `chatgpt.cliExecutable` 指向这个 wrapper。
-9. Codex 原生侧栏重载后，通过 wrapper 在远端工作目录启动 `codex app-server`。
+6. 如果远端 Codex 不存在或版本过旧，Runtime Manager 先查本机缓存，再查安装包内置包；两者都没有时，如果 `aura.runtime.remoteDownloadEnabled` 和 `aura.runtime.networkEnabled` 都开启，则让远端服务器用 `curl` 或 `wget` 直接下载 manifest 中的官方包；最后才由本机下载到缓存并上传。
+7. Runtime Manager 解包 Codex 到远端，写入 `registry.json`，并把 `current` 指向可用版本。
+8. Aura Code 读取本机 `~/.codex/auth.json` 和 `~/.codex/config.toml`，通过 SSH stdin 写入远端 `~/.codex`。默认 `remoteai.codex.credentialsOverwrite=false`，远端已有文件时不会覆盖。
+9. Aura Code 自动生成本机 SSH wrapper，并把本机 Codex 扩展的 `chatgpt.cliExecutable` 指向这个 wrapper。
+10. Codex 原生侧栏首次打开时，通过 wrapper 在远端工作目录启动 `codex app-server`，不需要额外 reload。
 
 如果新电脑只有桌面 app，但没有配置 release manifest / tarball，Aura Code 无法知道该给远程机器安装哪一份 remote server。当前开发验证环境通过 `scripts/remote-ai-validate.sh` 写入这些设置：
 
@@ -177,8 +176,8 @@ Aura Code 后续会把 Codex 视为内置 AI runtime，而不是一套只为 Cod
 远端 AI 是否可用，最终取决于三件事同时成立：
 
 - 远端 server 已安装并能启动。
-- 远端 Linux Codex runtime 已安装，并能读取有效 Codex 配置或登录态。
-- 本地 Codex 扩展的 `chatgpt.cliExecutable` 已切到 Aura Code 生成的 SSH wrapper，并已重载窗口。
+- 远端 Linux Codex runtime 已安装，并能读取由 Aura Code 桥接过去的 Codex 配置或登录态。
+- 本地 Codex 扩展的 `chatgpt.cliExecutable` 已切到 Aura Code 生成的 SSH wrapper；状态栏显示 `Aura Codex: remote active`。
 
 完整 Runtime Manager 设计见 [Aura Code Runtime Manager 设计](docs/superpowers/specs/2026-05-04-aura-code-runtime-manager-design.md)。
 
@@ -347,6 +346,16 @@ env -u ELECTRON_RUN_AS_NODE \
 ```
 
 验证 Aura Code 离线兜底时，将 `aura.runtime.networkEnabled` 设置为 `false`，并确认 `resources/aura-code/runtimes/codex/0.128.0-linux-x64.tar.gz` 存在。
+
+验证远端服务器自行下载 runtime 时，保持 `aura.runtime.networkEnabled=true` 和 `aura.runtime.remoteDownloadEnabled=true`，并确保远端有 `curl` 或 `wget`。如果远端已有同版本 registry 记录，先清理远端 `~/.aura-code/runtimes/registry.json` 中的 `codex` 项或换一个 manifest 版本再测。
+
+打包前准备内置 runtime：
+
+```sh
+scripts/remote-ai-package-runtimes.sh
+```
+
+该脚本会读取 `resources/aura-code/runtime-manifest.json`，把缺失的 Codex Linux 包下载到 `resources/aura-code/runtimes/codex/`。`scripts/remote-ai-package-darwin.sh` 默认会先执行它，并把整个 `resources/aura-code` 复制进 `.app/Contents/Resources/aura-code`。
 
 打包远程 server：
 

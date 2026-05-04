@@ -36,7 +36,7 @@ suite('RemoteAI diagnostics', () => {
 			}
 		});
 
-		assert.ok(report.includes('# RemoteAI Diagnostics'));
+		assert.ok(report.includes('# Aura Diagnostics'));
 		assert.ok(report.includes('- App: Code - OSS'));
 		assert.ok(report.includes('- Manifest: ok'));
 		assert.ok(report.includes('- Tarball: /release/vscode-reh-linux-x64.tar.gz'));
