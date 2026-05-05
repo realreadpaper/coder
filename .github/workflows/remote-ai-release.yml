@@ -1,14 +1,18 @@
-name: RemoteAI Release
+name: Aura Release
 
 on:
+  release:
+    types:
+      - published
   push:
     tags:
       - 'v*'
   workflow_dispatch:
     inputs:
       release_tag:
-        description: 'Release tag to publish, for example v0.1.0'
+        description: 'Release tag to publish, for example v0.1'
         required: true
+        default: 'v0.1'
         type: string
       draft:
         description: 'Create or keep the GitHub Release as draft'
@@ -17,7 +21,7 @@ on:
         type: boolean
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.event_name == 'release' && github.event.release.tag_name || github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
   cancel-in-progress: false
 
 permissions:
@@ -25,6 +29,7 @@ permissions:
 
 env:
   VSCODE_QUALITY: oss
+  PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
 
 jobs:
   codeql:
@@ -35,15 +40,15 @@ jobs:
       security-events: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v4
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v4
+        uses: github/codeql-action/init@v3
         with:
           languages: javascript-typescript
 
       - name: Analyze
-        uses: github/codeql-action/analyze@v4
+        uses: github/codeql-action/analyze@v3
 
   remote-ai-gate:
     name: RemoteAI Gate
@@ -52,10 +57,10 @@ jobs:
       contents: read
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
 
@@ -66,17 +71,16 @@ jobs:
         run: npm ci
         env:
           ELECTRON_SKIP_BINARY_DOWNLOAD: 1
-          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Compile RemoteAI extensions
+      - name: Compile Aura extensions
         run: |
           node ./node_modules/gulp/bin/gulp.js \
             compile-extension:our-remote-ssh \
             compile-extension:ai-codex-remote-bridge \
             compile-extension:ai-approval-ui
 
-      - name: Run RemoteAI unit tests
+      - name: Run Aura unit tests
         run: |
           npx mocha --timeout 10000 --ui=tdd \
             build/remote-ai/test/*.test.js \
@@ -99,10 +103,10 @@ jobs:
       contents: read
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
 
@@ -113,85 +117,271 @@ jobs:
         run: npm ci
         env:
           ELECTRON_SKIP_BINARY_DOWNLOAD: 1
-          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Package RemoteAI server
+      - name: Package remote server
         run: scripts/remote-ai-package-release.sh
         env:
-          REMOTE_AI_RELEASE_COMMIT: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
+          REMOTE_AI_RELEASE_COMMIT: ${{ github.event_name == 'release' && github.event.release.tag_name || github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
           REMOTE_AI_RELEASE_OUT: dist/remote-ai-release
 
-      - name: Upload remote server artifact
-        uses: actions/upload-artifact@v7
-        with:
-          name: remote-ai-server
-          path: dist/remote-ai-release/remote-releases/**
-          if-no-files-found: error
+      - name: Archive remote server
+        run: |
+          set -euo pipefail
+          release_tag="${{ github.event_name == 'release' && github.event.release.tag_name || github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}"
+          server_dir="dist/remote-ai-release/server"
+          mkdir -p "$server_dir"
+          tar -czf "$server_dir/Aura-${release_tag}-remote-server-linux-x64.tar.gz" -C dist/remote-ai-release remote-releases
+          (cd "$server_dir" && shasum -a 256 Aura-${release_tag}-remote-server-linux-x64.tar.gz > "Aura-${release_tag}-remote-server-linux-x64-SHA256SUMS.txt")
 
-  macos-unsigned:
-    name: macOS unsigned app
+      - name: Upload remote server artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: aura-remote-server
+          path: dist/remote-ai-release/server/**
+          if-no-files-found: error
+          retention-days: 14
+
+  macos:
+    name: macOS ${{ matrix.arch }}
     needs:
-      - codeql
-      - remote-ai-gate
-    runs-on: macos-14
+      - remote-server
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            runner: macos-13
+          - arch: arm64
+            runner: macos-14
+    runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
+
+      - name: Download remote server artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: aura-remote-server
+          path: dist/remote-ai-release/server
+
+      - name: Expand remote server artifact
+        run: |
+          set -euo pipefail
+          mkdir -p dist/remote-ai-release
+          tar -xzf dist/remote-ai-release/server/Aura-*-remote-server-linux-x64.tar.gz -C dist/remote-ai-release
 
       - name: Install dependencies
         run: npm ci
         env:
-          npm_config_arch: arm64
-          VSCODE_ARCH: arm64
+          npm_config_arch: ${{ matrix.arch }}
+          VSCODE_ARCH: ${{ matrix.arch }}
           ELECTRON_SKIP_BINARY_DOWNLOAD: 1
-          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GYP_DEFINES: kerberos_use_rtld=false
 
       - name: Package macOS app
         run: scripts/remote-ai-package-darwin.sh
         env:
-          VSCODE_ARCH: arm64
+          VSCODE_ARCH: ${{ matrix.arch }}
           REMOTE_AI_RELEASE_OUT: dist/remote-ai-release
 
-      - name: Upload macOS app artifact
-        uses: actions/upload-artifact@v7
+      - name: Create macOS disk image
+        run: |
+          set -euo pipefail
+          release_tag="${{ github.event_name == 'release' && github.event.release.tag_name || github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}"
+          client_dir="dist/remote-ai-release/client"
+          app_root="../VSCode-darwin-${{ matrix.arch }}"
+          mv "$client_dir/remote-ai-darwin-${{ matrix.arch }}-unsigned.zip" "$client_dir/Aura-${release_tag}-darwin-${{ matrix.arch }}-unsigned.zip"
+          hdiutil create \
+            -volname "Aura" \
+            -srcfolder "$app_root/Aura.app" \
+            -ov \
+            -format UDZO \
+            "$client_dir/Aura-${release_tag}-darwin-${{ matrix.arch }}-unsigned.dmg"
+          rm -f "$client_dir/SHA256SUMS"
+          (cd "$client_dir" && shasum -a 256 Aura-${release_tag}-darwin-${{ matrix.arch }}-* > "Aura-${release_tag}-darwin-${{ matrix.arch }}-SHA256SUMS.txt")
+
+      - name: Upload macOS artifact
+        uses: actions/upload-artifact@v4
         with:
-          name: remote-ai-darwin-arm64-unsigned
+          name: aura-darwin-${{ matrix.arch }}
           path: dist/remote-ai-release/client/**
           if-no-files-found: error
+          retention-days: 14
+
+  linux:
+    name: Linux x64
+    needs:
+      - remote-server
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+
+      - name: Download remote server artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: aura-remote-server
+          path: dist/remote-ai-release/server
+
+      - name: Expand remote server artifact
+        run: |
+          set -euo pipefail
+          mkdir -p dist/remote-ai-release
+          tar -xzf dist/remote-ai-release/server/Aura-*-remote-server-linux-x64.tar.gz -C dist/remote-ai-release
+
+      - name: Install Linux build tools
+        run: sudo apt-get update -y && sudo apt-get install -y build-essential pkg-config libx11-dev libx11-xcb-dev libxkbfile-dev libnotify-bin libkrb5-dev fakeroot rpm
+
+      - name: Install dependencies
+        run: npm ci
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: 1
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build Linux app
+        run: |
+          npm run electron x64
+          npm run gulp vscode-linux-x64-min
+
+      - name: Bundle remote assets
+        run: |
+          set -euo pipefail
+          resources_dir="../VSCode-linux-x64/resources"
+          rm -rf "$resources_dir/remote-releases" "$resources_dir/aura-code"
+          cp -R dist/remote-ai-release/remote-releases "$resources_dir/remote-releases"
+          cp -R resources/aura-code "$resources_dir/aura-code"
+
+      - name: Package Linux installers
+        run: |
+          set -euo pipefail
+          release_tag="${{ github.event_name == 'release' && github.event.release.tag_name || github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}"
+          client_dir="dist/remote-ai-release/client"
+          mkdir -p "$client_dir"
+          tar -czf "$client_dir/Aura-${release_tag}-linux-x64.tar.gz" -C .. VSCode-linux-x64
+          npm run gulp vscode-linux-x64-prepare-deb vscode-linux-x64-build-deb
+          npm run gulp vscode-linux-x64-prepare-rpm vscode-linux-x64-build-rpm
+          cp .build/linux/deb/amd64/deb/*.deb "$client_dir/"
+          cp .build/linux/rpm/x86_64/*.rpm "$client_dir/"
+          (cd "$client_dir" && shasum -a 256 *.{deb,rpm,gz} > "Aura-${release_tag}-linux-x64-SHA256SUMS.txt")
+
+      - name: Upload Linux artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: aura-linux-x64
+          path: dist/remote-ai-release/client/**
+          if-no-files-found: error
+          retention-days: 14
+
+  windows:
+    name: Windows x64
+    needs:
+      - remote-server
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+
+      - name: Download remote server artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: aura-remote-server
+          path: dist/remote-ai-release/server
+
+      - name: Expand remote server artifact
+        run: |
+          set -euo pipefail
+          mkdir -p dist/remote-ai-release
+          tar -xzf dist/remote-ai-release/server/Aura-*-remote-server-linux-x64.tar.gz -C dist/remote-ai-release
+
+      - name: Install dependencies
+        run: npm ci
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: 1
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build Windows app
+        run: |
+          npm run electron x64
+          npm run gulp vscode-win32-x64-min
+
+      - name: Bundle remote assets
+        run: |
+          set -euo pipefail
+          resources_dir="../VSCode-win32-x64/resources"
+          rm -rf "$resources_dir/remote-releases" "$resources_dir/aura-code"
+          cp -R dist/remote-ai-release/remote-releases "$resources_dir/remote-releases"
+          cp -R resources/aura-code "$resources_dir/aura-code"
+
+      - name: Package Windows installer
+        run: |
+          set -euo pipefail
+          release_tag="${{ github.event_name == 'release' && github.event.release.tag_name || github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}"
+          client_dir="dist/remote-ai-release/client"
+          mkdir -p "$client_dir"
+          npm run gulp vscode-win32-x64-inno-updater vscode-win32-x64-user-setup
+          cp .build/win32-x64/user-setup/VSCodeSetup.exe "$client_dir/Aura-${release_tag}-win32-x64-user-setup.exe"
+          7z a "$client_dir/Aura-${release_tag}-win32-x64.zip" ../VSCode-win32-x64 >/dev/null
+          (cd "$client_dir" && sha256sum Aura-${release_tag}-win32-x64-* > "Aura-${release_tag}-win32-x64-SHA256SUMS.txt")
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: aura-win32-x64
+          path: dist/remote-ai-release/client/**
+          if-no-files-found: error
+          retention-days: 14
 
   publish:
     name: Publish GitHub Release
     needs:
       - remote-server
-      - macos-unsigned
+      - macos
+      - linux
+      - windows
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - name: Download release artifacts
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v4
         with:
-          path: dist
+          path: dist/artifacts
 
-      - name: Publish release
+      - name: Publish release assets
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
-          DRAFT_RELEASE: ${{ github.event_name != 'workflow_dispatch' || inputs.draft }}
+          RELEASE_TAG: ${{ github.event_name == 'release' && github.event.release.tag_name || github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
+          DRAFT_RELEASE: ${{ github.event_name == 'workflow_dispatch' && inputs.draft || github.event_name == 'push' }}
         run: |
           set -euo pipefail
 
-          mapfile -t files < <(find dist -type f | sort)
+          mapfile -t files < <(find dist/artifacts -type f | sort)
           if [[ "${#files[@]}" == "0" ]]; then
             echo "No release artifacts found" >&2
             exit 1
@@ -208,6 +398,6 @@ jobs:
             gh release create "$RELEASE_TAG" "${files[@]}" \
               "${draft_args[@]}" \
               --target "$GITHUB_SHA" \
-              --title "RemoteAI $RELEASE_TAG" \
-              --notes "Automated RemoteAI release. Server and client artifacts were produced by GitHub Actions."
+              --title "Aura $RELEASE_TAG" \
+              --notes "Automated Aura release. macOS, Windows, Linux, and remote server artifacts were produced by GitHub Actions."
           fi

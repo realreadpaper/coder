@@ -17,33 +17,44 @@ It enforces:
 
 ## Release Trigger
 
-Push a version tag:
+The current release line is `v0.1`.
+
+Publish from GitHub:
+
+1. Create a GitHub Release for tag `v0.1`.
+2. Publish it.
+3. The `Aura Release` workflow builds and uploads the installers to that Release.
+
+Pushing a version tag is also supported:
 
 ```sh
-git tag v0.1.0
-git push origin v0.1.0
+git tag v0.1
+git push origin v0.1
 ```
 
-The release workflow creates a draft GitHub Release by default.
+Tag pushes create a draft GitHub Release by default so artifacts can be reviewed before publishing.
 
 The release workflow does not package first. It runs CodeQL and the RemoteAI gate before producing artifacts. Packaging jobs are blocked if either gate fails.
 
 Manual release is also supported from the GitHub Actions page:
 
 - Workflow: `RemoteAI Release`
-- Input `release_tag`: version tag, for example `v0.1.0`
+- Input `release_tag`: version tag, default `v0.1`
 - Input `draft`: keep enabled until final manual review
 
 ## Produced Artifacts
 
 The release workflow uploads:
 
-- `remote-ai-server`: Linux x64 RemoteAI server tarball, `manifest.json`, and `SHA256SUMS`.
-- `remote-ai-darwin-arm64-unsigned`: unsigned macOS arm64 app zip and `SHA256SUMS`.
+- `aura-remote-server`: Linux x64 remote server bundle and a platform-named SHA256 file.
+- `aura-darwin-x64`: unsigned macOS x64 app zip, unsigned `.dmg`, and a platform-named SHA256 file.
+- `aura-darwin-arm64`: unsigned macOS arm64 app zip, unsigned `.dmg`, and a platform-named SHA256 file.
+- `aura-linux-x64`: Linux x64 tarball, `.deb`, `.rpm`, and a platform-named SHA256 file.
+- `aura-win32-x64`: Windows x64 user setup `.exe`, app zip, and a platform-named SHA256 file.
 
 The remote server package is built by `scripts/remote-ai-package-release.sh`, then verified by `build/remote-ai/releaseDoctor.js`.
 
-The macOS app package is built by `scripts/remote-ai-package-darwin.sh` from the existing Code-OSS darwin gulp build.
+The macOS app package is built by `scripts/remote-ai-package-darwin.sh` from the Aura darwin gulp build. Linux and Windows packages are built from the corresponding `vscode-linux-x64-min` and `vscode-win32-x64-min` gulp outputs. Every desktop package includes the bundled remote server release and `resources/aura-code` runtime bundle.
 
 ## Local Dry Run
 
@@ -87,5 +98,5 @@ Before publishing the draft release:
 - Confirm `RemoteAI Security` passed for the tag commit.
 - Confirm `RemoteAI Release` passed.
 - Download `manifest.json` and verify it points to the expected commit.
-- Confirm `SHA256SUMS` contains the uploaded tarball and app zip.
+- Confirm the platform-named SHA256 files contain the uploaded installers.
 - Run the app manually and connect to `ssh dev` with `scripts/remote-ai-validate.sh` if this is a user-facing build.
