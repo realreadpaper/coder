@@ -14,7 +14,10 @@ REMOTE_PATH="${REMOTE_AI_VALIDATE_REMOTE_PATH:-/home/hejianglong/remote-ai-manua
 COMMIT="${REMOTE_AI_VALIDATE_COMMIT:-dev-compat}"
 USER_DATA_DIR="${REMOTE_AI_VALIDATE_USER_DATA_DIR:-/tmp/remote-ai-validate-user-data}"
 LOGS_DIR="${REMOTE_AI_VALIDATE_LOGS_DIR:-/tmp/remote-ai-validate-logs}"
-CODEX_EXTENSIONS_DIR="${REMOTE_AI_VALIDATE_EXTENSIONS_DIR:-$HOME/.vscode-oss/extensions}"
+PRODUCT_NAME_LONG="$(node -p "require('./product.json').nameLong")"
+PRODUCT_APPLICATION_NAME="$(node -p "require('./product.json').applicationName")"
+PRODUCT_DATA_FOLDER="$(node -p "require('./product.json').dataFolderName")"
+CODEX_EXTENSIONS_DIR="${REMOTE_AI_VALIDATE_EXTENSIONS_DIR:-$HOME/$PRODUCT_DATA_FOLDER/extensions}"
 LOCAL_CODEX_CLI="${REMOTE_AI_VALIDATE_CODEX_CLI:-$(command -v codex || true)}"
 REMOTE_CODEX_CLI="${REMOTE_AI_VALIDATE_REMOTE_CODEX_CLI:-}"
 AURA_RUNTIME_FALLBACK_VERSION="${AURA_RUNTIME_FALLBACK_VERSION:-0.128.0}"
@@ -23,7 +26,11 @@ MANIFEST_PATH="$RELEASE_DIR/manifest.json"
 TARBALL_PATH="$RELEASE_DIR/vscode-reh-linux-x64.tar.gz"
 SERVER_SOURCE="${REMOTE_AI_VALIDATE_SERVER_SOURCE:-$ROOT/../vscode-reh-linux-x64}"
 COMPAT_SERVER_SOURCE="${REMOTE_AI_VALIDATE_COMPAT_SERVER_SOURCE:-$ROOT/../remote-server/extracted/vscode-reh-linux-x64}"
-ELECTRON_APP="$ROOT/.build/electron/Code - OSS.app/Contents/MacOS/Electron"
+if [[ "$OSTYPE" == "darwin"* ]]; then
+	ELECTRON_APP="$ROOT/.build/electron/$PRODUCT_NAME_LONG.app/Contents/MacOS/Electron"
+else
+	ELECTRON_APP="$ROOT/.build/electron/$PRODUCT_APPLICATION_NAME"
+fi
 
 usage() {
 	cat <<EOF
@@ -35,7 +42,7 @@ REMOTE_AI_VALIDATE_REMOTE_PATH       Remote workspace, default: /home/hejianglon
 REMOTE_AI_VALIDATE_USER_DATA_DIR     Local user data dir, default: /tmp/remote-ai-validate-user-data
 REMOTE_AI_VALIDATE_LOGS_DIR          Local logs dir, default: /tmp/remote-ai-validate-logs
 REMOTE_AI_VALIDATE_COMMIT            RemoteAI server commit id, default: dev-compat
-REMOTE_AI_VALIDATE_EXTENSIONS_DIR    Local extensions dir, default: ~/.vscode-oss/extensions
+REMOTE_AI_VALIDATE_EXTENSIONS_DIR    Local extensions dir, default: ~/$PRODUCT_DATA_FOLDER/extensions
 REMOTE_AI_VALIDATE_CODEX_CLI         Local Codex CLI path retained for local fallback checks, default: PATH codex
 REMOTE_AI_VALIDATE_REMOTE_CODEX_CLI  Remote Linux Codex CLI path. Empty prepares one on the SSH host
 EOF
@@ -168,7 +175,7 @@ if [[ "$PREPARE_ONLY" == "1" ]]; then
 	exit 0
 fi
 
-echo "[remote-ai] launching Code-OSS dev window..."
+echo "[remote-ai] launching $PRODUCT_NAME_LONG dev window..."
 export VSCODE_SKIP_PRELAUNCH="${VSCODE_SKIP_PRELAUNCH:-1}"
 exec "$ROOT/scripts/code.sh" \
 	--skip-welcome \

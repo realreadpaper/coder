@@ -1,0 +1,30 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- 背景渐变 -->
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0F2027"/>
+      <stop offset="50%" stop-color="#203A43"/>
+      <stop offset="100%" stop-color="#2C5364"/>
+    </linearGradient>
+    <!-- 圆环渐变色 -->
+    <linearGradient id="ring" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#D0F6FF"/>
+      <stop offset="100%" stop-color="#99F7E8"/>
+    </linearGradient>
+  </defs>
+
+  <!-- 圆角背景 -->
+  <rect x="0" y="0" width="512" height="512" rx="110" fill="url(#bg)"/>
+  
+  <!-- 内层深度感（微弱） -->
+  <rect x="60" y="60" width="392" height="392" rx="80" fill="#1F4E5C" opacity="0.3"/>
+
+  <!-- 主发光圆环（缺口设计） -->
+  <circle cx="256" cy="256" r="140" fill="none" stroke="url(#ring)" stroke-width="18" stroke-linecap="round" stroke-dasharray="880" stroke-dashoffset="250" transform="rotate(-30 256 256)"/>
+
+  <!-- 内部符号：横杠 -->
+  <rect x="220" y="310" width="80" height="24" rx="12" fill="#FFFFFF"/>
+  
+  <!-- 内部符号：箭头头部 -->
+  <path d="M200 210 L240 250 L200 290" fill="none" stroke="#FFFFFF" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

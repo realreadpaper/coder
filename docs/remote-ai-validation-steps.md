@@ -78,9 +78,9 @@ PATH="/usr/local/opt/node@22/bin:$PATH" scripts/remote-ai-validate.sh --prepare-
 [remote-ai] prepare-only complete.
 ```
 
-## 3. 启动 Code-OSS
+## 3. 启动 Aura
 
-先关闭所有旧的 Code-OSS 窗口。旧窗口可能缓存命令、视图和扩展状态，影响 Chat 屏蔽验证。
+先关闭所有旧的 Aura 窗口。旧窗口可能缓存命令、视图和扩展状态，影响 Chat 屏蔽验证。
 
 推荐使用封装脚本：
 
@@ -103,14 +103,14 @@ VSCODE_SKIP_PRELAUNCH=1 PATH="/usr/local/opt/node@22/bin:$PATH" ./scripts/code.s
 
 期望：
 
-- Code-OSS 正常显示 workbench。
+- Aura 正常显示 workbench。
 - 不出现黑屏。
 - 如果出现远程 OS 兼容性提示，选择 `Allow` 后继续验证。
 
 不要直接执行：
 
 ```sh
-open -n ".build/electron/Code - OSS.app"
+open -n ".build/electron/Aura.app"
 ```
 
 源码开发态需要通过 `scripts/code.sh` 注入开发环境；直接打开 app bundle 容易启动出黑屏或加载到错误上下文。
@@ -404,16 +404,16 @@ E2E 会覆盖：
 
 ## 14. 常见问题定位
 
-### Code-OSS 黑屏
+### Aura 黑屏
 
 处理顺序：
 
-1. 关闭所有旧 Code-OSS 窗口。
+1. 关闭所有旧 Aura 窗口。
 2. 使用 `scripts/remote-ai-validate.sh` 启动，不要直接打开 app bundle。
 3. 确认 Electron 存在：
 
 ```sh
-test -x ".build/electron/Code - OSS.app/Contents/MacOS/Electron" && echo ok
+test -x ".build/electron/Aura.app/Contents/MacOS/Electron" && echo ok
 ```
 
 4. 查看日志：

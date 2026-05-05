@@ -107,8 +107,8 @@
 				},
 				"remoteai.codex.credentialsOverwrite": {
 					"type": "boolean",
-					"default": false,
-					"description": "Overwrite existing remote Codex auth.json and config.toml during credential sync. Disabled by default to preserve remote accounts."
+					"default": true,
+					"description": "Overwrite existing remote Codex auth.json and config.toml during SSH activation so the remote session receives the latest local Codex configuration."
 				},
 				"remoteai.codex.remoteCliPath": {
 					"type": "string",

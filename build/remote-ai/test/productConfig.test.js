@@ -4,9 +4,30 @@
  *--------------------------------------------------------------------------------------------*/
 
 const assert = require('assert');
+const fs = require('fs');
+const path = require('path');
 const product = require('../../../product.json');
 
 suite('RemoteAI product configuration', () => {
+	test('brands the desktop application as Aura', () => {
+		assert.strictEqual(product.nameShort, 'Aura');
+		assert.strictEqual(product.nameLong, 'Aura');
+		assert.strictEqual(product.applicationName, 'aura');
+		assert.strictEqual(product.dataFolderName, '.aura');
+		assert.strictEqual(product.darwinBundleIdentifier, 'app.aura.code');
+		assert.strictEqual(product.linuxIconName, 'aura');
+		assert.strictEqual(product.urlProtocol, 'aura');
+	});
+
+	test('ships an Aura macOS application icon', () => {
+		const root = path.join(__dirname, '../../..');
+		const svg = fs.readFileSync(path.join(root, 'resources/darwin/aura-app-icon.svg'), 'utf8');
+		const icns = fs.statSync(path.join(root, 'resources/darwin/code.icns'));
+
+		assert.match(svg, /Aura application icon/);
+		assert.ok(icns.size > 100000);
+	});
+
 	test('declares remote server identity and download template', () => {
 		assert.strictEqual(product.serverApplicationName, 'remote-ai-server');
 		assert.strictEqual(product.serverDataFolderName, '.remote-ai-server');

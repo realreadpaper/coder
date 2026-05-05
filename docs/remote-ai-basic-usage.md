@@ -49,7 +49,7 @@ RemoteAI runs Codex tasks directly in the workspace execution host:
 - Other remote authorities are rejected for Codex task execution so commands never run in an ambiguous location.
 - The previous local mirror plus rsync execution path is removed from production code.
 
-The Codex sidebar is configured before an SSH workspace opens. Aura SSH probes or installs the remote runtime, syncs the minimum Codex credentials, writes a managed SSH wrapper, and points `chatgpt.cliExecutable` at that wrapper before Codex starts. The status bar shows the current binding state: local mode, checking, remote active, or remote unavailable. A failed runtime bind writes a blocking remote-only wrapper instead of falling back to local `codex`.
+The Codex sidebar is configured before an SSH workspace opens. Aura SSH probes or installs the remote runtime, syncs the latest local `auth.json` and `config.toml` to the remote `~/.codex` by default, writes a managed SSH wrapper, and points `chatgpt.cliExecutable` at that wrapper before Codex starts. The status bar shows the current binding state: local mode, checking, remote active, or remote unavailable. A failed runtime bind writes a blocking remote-only wrapper instead of falling back to local `codex`.
 
 The bridge does not copy or modify the Codex extension. It provides the local/SSH routing, remote-side guardrails, and platform selection needed for Codex to operate on the correct workspace through normal VS Code APIs.
 
@@ -107,7 +107,7 @@ Use the wrapper script for manual validation from sources:
 scripts/remote-ai-validate.sh
 ```
 
-It prepares `/tmp/remote-ai-validate-user-data`, checks the release manifest with `releaseDoctor`, prepares `/home/hejianglong/remote-ai-manual` on `ssh dev`, and starts Code-OSS through `scripts/code.sh` with the required development environment. Do not use `open -n .build/electron/Code - OSS.app` for source builds; that path can start Electron without the Code-OSS development bootstrap and show a black window.
+It prepares `/tmp/remote-ai-validate-user-data`, checks the release manifest with `releaseDoctor`, prepares `/home/hejianglong/remote-ai-manual` on `ssh dev`, and starts Aura through `scripts/code.sh` with the required development environment. Do not use `open -n .build/electron/Aura.app` for source builds; that path can start Electron without the Aura development bootstrap and show a black window.
 
 Use `--prepare-only` when you only want to refresh settings and remote fixtures:
 

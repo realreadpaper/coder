@@ -642,11 +642,12 @@ async function syncCodexCredentialsForRemote(
 	}
 
 	const payload = buildCodexCredentialSyncPayload(localFiles);
+	const overwrite = codexConfiguration.get<boolean>('credentialsOverwrite') ?? true;
 	let result;
 	try {
 		result = await sshPipe(host, buildCodexCredentialSyncScript({
 			remoteCodexHome: path.posix.join(remoteHome, '.codex'),
-			overwrite: codexConfiguration.get<boolean>('credentialsOverwrite') ?? false
+			overwrite
 		}), {
 			input: Buffer.from(JSON.stringify(payload)),
 			sshPath,
@@ -674,12 +675,12 @@ async function syncCodexCredentialsForRemote(
 		return;
 	}
 
-	output.appendLine(`Aura Code synced Codex credentials to ${host}.`);
+	output.appendLine(`Aura Code synced latest Codex credentials and config to ${host}.`);
 	await auditLog.record({
 		operation: 'codex.credentials.sync',
 		status: 'succeeded',
 		authority: `ssh-remote+${encodeURIComponent(host)}`,
-		metadata: { files: payload.files.map(file => file.relativePath), overwrite: codexConfiguration.get<boolean>('credentialsOverwrite') ?? false }
+		metadata: { files: payload.files.map(file => file.relativePath), overwrite }
 	});
 }
 

@@ -1,4 +1,4 @@
-# Visual Studio Code - Open Source ("Code - OSS")
+# Aura
 [![Feature Requests](https://img.shields.io/github/issues/microsoft/vscode/feature-request.svg)](https://github.com/microsoft/vscode/issues?q=is%3Aopen+is%3Aissue+label%3Afeature-request+sort%3Areactions-%2B1-desc)
 [![Bugs](https://img.shields.io/github/issues/microsoft/vscode/bug.svg)](https://github.com/microsoft/vscode/issues?utf8=✓&q=is%3Aissue+is%3Aopen+label%3Abug)
 [![Gitter](https://img.shields.io/badge/chat-on%20gitter-yellow.svg)](https://gitter.im/Microsoft/vscode)
@@ -9,7 +9,7 @@
 
 当前重点不是替换 VS Code 的所有 Remote-SSH 能力，而是把最小可用闭环打通：
 
-- 本机运行 Code-OSS UI。
+- 本机运行 Aura UI。
 - 通过 `ssh` 连接远程开发机。
 - 在远程机器上安装并启动兼容的 Code-OSS remote server。
 - Explorer、编辑器、搜索、终端、Git 和 LSP 都围绕远程工作区运行。
@@ -117,7 +117,7 @@ Aura Code 后续会把 Codex 视为内置 AI runtime，而不是一套只为 Cod
 - 获取 runtime 的顺序是：本机缓存、安装包内置包、远端服务器直接下载、本机下载后上传。
 - 远端直接下载使用 runtime manifest 中的 `officialUrl` / `mirrorUrl`，默认 Codex `0.128.0` 指向 OpenAI 发布在 npm registry 的 Linux 包。
 - 没有网络时仍可上传安装包内置基础版本，例如 Codex `0.128.x`，确保核心能力可用。
-- 打开 SSH 工作区后自动同步本机 Codex 凭据到远端 `~/.codex`，默认只复制 `auth.json` 和 `config.toml`，不复制 history、logs、sessions。
+- 打开 SSH 工作区后自动把本机最新 Codex 凭据和配置同步到远端 `~/.codex`，默认覆盖远端已有的 `auth.json` 和 `config.toml`，但不复制 history、logs、sessions。
 - 安装完成后生成 SSH wrapper，并在打开远程工作区前设置 `chatgpt.cliExecutable`。
 
 推荐的远端目录会从现有 Codex 专用路径迁移为：
@@ -156,7 +156,7 @@ Aura Code 后续会把 Codex 视为内置 AI runtime，而不是一套只为 Cod
 5. Aura Code Runtime Manager 检查远端 `~/.aura-code/runtimes` 中是否已有满足 manifest 的 Codex。
 6. 如果远端 Codex 不存在或版本过旧，Runtime Manager 先查本机缓存，再查安装包内置包；两者都没有时，如果 `aura.runtime.remoteDownloadEnabled` 和 `aura.runtime.networkEnabled` 都开启，则让远端服务器用 `curl` 或 `wget` 直接下载 manifest 中的官方包；最后才由本机下载到缓存并上传。
 7. Runtime Manager 解包 Codex 到远端，写入 `registry.json`，并把 `current` 指向可用版本。
-8. Aura Code 读取本机 `~/.codex/auth.json` 和 `~/.codex/config.toml`，通过 SSH stdin 写入远端 `~/.codex`。默认 `remoteai.codex.credentialsOverwrite=false`，远端已有文件时不会覆盖。
+8. Aura Code 读取本机 `~/.codex/auth.json` 和 `~/.codex/config.toml`，通过 SSH stdin 写入远端 `~/.codex`。默认 `remoteai.codex.credentialsOverwrite=true`，每次 SSH 激活都会把本机最新配置推送到远端；需要保留远端独立账号时可手动关闭覆盖。
 9. Aura Code 自动生成本机 SSH wrapper，并把本机 Codex 扩展的 `chatgpt.cliExecutable` 指向这个 wrapper。
 10. Codex 原生侧栏首次打开时，通过 wrapper 在远端工作目录启动 `codex app-server`，不需要额外 reload。
 

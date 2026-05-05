@@ -10,7 +10,7 @@ suite('RemoteAI diagnostics', () => {
 	test('renders configured release and host facts', () => {
 		const report = createDiagnosticsReport({
 			now: '2026-05-03T10:00:00.000Z',
-			appName: 'Code - OSS',
+			appName: 'Aura',
 			appCommit: 'dev',
 			remoteName: undefined,
 			workspaceFolders: ['file:///workspace'],
@@ -37,7 +37,7 @@ suite('RemoteAI diagnostics', () => {
 		});
 
 		assert.ok(report.includes('# Aura Diagnostics'));
-		assert.ok(report.includes('- App: Code - OSS'));
+		assert.ok(report.includes('- App: Aura'));
 		assert.ok(report.includes('- Manifest: ok'));
 		assert.ok(report.includes('- Tarball: /release/vscode-reh-linux-x64.tar.gz'));
 		assert.ok(report.includes('- SSH hosts: dev, prod'));
@@ -47,7 +47,7 @@ suite('RemoteAI diagnostics', () => {
 	test('renders manifest errors without throwing', () => {
 		const report = createDiagnosticsReport({
 			now: '2026-05-03T10:00:00.000Z',
-			appName: 'Code - OSS',
+			appName: 'Aura',
 			appCommit: 'dev',
 			remoteName: 'ssh-remote',
 			workspaceFolders: [],

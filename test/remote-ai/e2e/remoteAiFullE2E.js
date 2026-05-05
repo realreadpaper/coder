@@ -10,6 +10,7 @@ const os = require('os');
 const path = require('path');
 
 const ROOT = path.resolve(__dirname, '../../..');
+const product = require(path.join(ROOT, 'product.json'));
 const HOST = process.env.REMOTE_AI_TEST_SSH || 'dev';
 const REMOTE_ROOT = process.env.REMOTE_AI_TEST_WORKSPACE || '/home/hejianglong/remote-ai-e2e';
 const COMMIT = process.env.REMOTE_AI_TEST_COMMIT || 'dev-compat';
@@ -232,10 +233,10 @@ async function waitForRemoteDiff(marker) {
 
 function electronPath() {
 	if (process.platform === 'darwin') {
-		return path.join(ROOT, '.build/electron/Code - OSS.app/Contents/MacOS/Electron');
+		return path.join(ROOT, `.build/electron/${product.nameLong}.app/Contents/MacOS/Electron`);
 	}
 	if (process.platform === 'linux') {
-		return path.join(ROOT, '.build/electron/code-oss');
+		return path.join(ROOT, `.build/electron/${product.applicationName}`);
 	}
 	throw new Error(`Unsupported E2E platform: ${process.platform}`);
 }

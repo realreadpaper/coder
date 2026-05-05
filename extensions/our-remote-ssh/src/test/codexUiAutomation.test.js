@@ -71,4 +71,12 @@ suite('Aura Codex UI automation', () => {
 		assert.ok(extensionSource.includes('chatgpt.cliExecutable'));
 		assert.ok(extensionSource.includes('settings.json'));
 	});
+
+	test('pushes latest local Codex credentials and config on SSH activation by default', () => {
+		const pkg = require('../../package.json');
+		const extensionSource = fs.readFileSync(path.join(__dirname, '..', 'extension.ts'), 'utf8');
+
+		assert.strictEqual(pkg.contributes.configuration.properties['remoteai.codex.credentialsOverwrite'].default, true);
+		assert.ok(extensionSource.includes('codexConfiguration.get<boolean>(\'credentialsOverwrite\') ?? true'));
+	});
 });
