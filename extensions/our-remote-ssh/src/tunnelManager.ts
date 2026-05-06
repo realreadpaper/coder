@@ -6,6 +6,7 @@
 import { ChildProcess, spawn } from 'child_process';
 import * as net from 'net';
 import { AuditLogWriter } from './auditLog';
+import { buildSshArgs } from './sshProcess';
 
 export interface SshTunnelOptions {
 	readonly sshPath?: string;
@@ -42,7 +43,7 @@ export async function openSshTunnel(
 		metadata: { localPort, remoteHost, remotePort }
 	});
 
-	const child = spawn(sshPath, ['-N', '-L', forwardSpec, host], { stdio: ['ignore', 'pipe', 'pipe'] });
+	const child = spawn(sshPath, buildSshArgs(['-N', '-L', forwardSpec, host]), { stdio: ['ignore', 'pipe', 'pipe'] });
 	let stderr = '';
 	child.stderr?.on('data', chunk => stderr += chunk.toString());
 

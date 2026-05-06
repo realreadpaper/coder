@@ -24,6 +24,13 @@ export interface DiagnosticsManifestStatus {
 	readonly errors: readonly string[];
 }
 
+export interface DiagnosticsSshMultiplexingStatus {
+	readonly mode: string;
+	readonly controlDir: string;
+	readonly controlPath: string;
+	readonly fallback: string;
+}
+
 export interface DiagnosticsReportInput {
 	readonly now: string;
 	readonly appName: string;
@@ -34,6 +41,7 @@ export interface DiagnosticsReportInput {
 	readonly hostOptions: readonly string[];
 	readonly recentConnections: readonly ConnectionHistoryEntry[];
 	readonly auditPath: string;
+	readonly sshMultiplexing: DiagnosticsSshMultiplexingStatus;
 	readonly manifest: DiagnosticsManifestStatus;
 }
 
@@ -56,6 +64,10 @@ export function createDiagnosticsReport(input: DiagnosticsReportInput): string {
 		`- Server tarball override: ${input.configuration.serverTarballPath || 'not configured'}`,
 		`- SSH hosts: ${input.hostOptions.length ? input.hostOptions.join(', ') : 'none'}`,
 		`- Recent: ${formatRecentConnections(input.recentConnections)}`,
+		`- SSH multiplexing: ${input.sshMultiplexing.mode}`,
+		`- SSH control dir: ${input.sshMultiplexing.controlDir}`,
+		`- SSH control path: ${input.sshMultiplexing.controlPath}`,
+		`- SSH multiplex fallback: ${input.sshMultiplexing.fallback}`,
 		'',
 		'## Release',
 		`- Manifest: ${input.manifest.ok ? 'ok' : 'failed'}`,

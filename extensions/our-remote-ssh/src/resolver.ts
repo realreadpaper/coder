@@ -48,11 +48,126 @@ export interface ResolveSshRemoteOptions {
 	readonly installServer?: InstallServerFn;
 	readonly launchServer?: LaunchServerFn;
 	readonly openTunnel?: OpenTunnelFn;
+	readonly healthCheck?: ConnectionHealthCheckFn;
 }
 
 export type InstallServerFn = (host: string, commit: string) => Promise<RemoteServerInstall>;
 export type LaunchServerFn = (host: string, serverDir: string) => Promise<DisposableServer>;
 export type OpenTunnelFn = (host: string, remotePort: number) => Promise<DisposableTunnel>;
+export type ConnectionHealthCheckFn = (connection: ResolvedSshRemote) => boolean | Promise<boolean>;
+
+interface ManagedConnectionEntry {
+	readonly key: string;
+	readonly promise: Promise<ResolvedSshRemote>;
+	refCount: number;
+	disposed: boolean;
+	connection?: ResolvedSshRemote;
+}
+
+export class ConnectionManager {
+	private readonly entries = new Map<string, ManagedConnectionEntry>();
+
+	async acquire(authority: string, options: ResolveSshRemoteOptions): Promise<ResolvedSshRemote> {
+		const key = createConnectionKey(authority, options.commit);
+		let entry = this.entries.get(key);
+		if (entry?.connection && options.healthCheck) {
+			const healthy = await options.healthCheck(entry.connection);
+			if (!healthy) {
+				this.disposeEntry(entry);
+				entry = undefined;
+			}
+		}
+
+		if (!entry) {
+			const createdEntry: ManagedConnectionEntry = {
+				key,
+				promise: resolveSshRemoteAuthority(authority, options),
+				refCount: 0,
+				disposed: false
+			};
+			this.entries.set(key, createdEntry);
+			createdEntry.promise.then(connection => {
+				if (createdEntry.disposed) {
+					connection.dispose();
+					return;
+				}
+				createdEntry.connection = connection;
+			}, () => {
+				if (this.entries.get(key) === createdEntry) {
+					this.entries.delete(key);
+				}
+			});
+			entry = createdEntry;
+		}
+
+		entry.refCount++;
+		try {
+			const connection = await entry.promise;
+			return this.createHandle(entry, connection);
+		} catch (error) {
+			this.releaseEntry(entry);
+			throw error;
+		}
+	}
+
+	reconnect(authority: string, options: ResolveSshRemoteOptions): Promise<ResolvedSshRemote> {
+		const key = createConnectionKey(authority, options.commit);
+		const entry = this.entries.get(key);
+		if (entry) {
+			this.disposeEntry(entry);
+		}
+		return this.acquire(authority, options);
+	}
+
+	dispose(): void {
+		for (const entry of this.entries.values()) {
+			this.disposeEntry(entry);
+		}
+		this.entries.clear();
+	}
+
+	private createHandle(entry: ManagedConnectionEntry, connection: ResolvedSshRemote): ResolvedSshRemote {
+		let released = false;
+		return {
+			authority: connection.authority,
+			install: connection.install,
+			server: connection.server,
+			tunnel: connection.tunnel,
+			dispose: () => {
+				if (released) {
+					return;
+				}
+				released = true;
+				this.releaseEntry(entry);
+			}
+		};
+	}
+
+	private releaseEntry(entry: ManagedConnectionEntry): void {
+		if (entry.disposed || this.entries.get(entry.key) !== entry) {
+			return;
+		}
+		entry.refCount = Math.max(0, entry.refCount - 1);
+		if (entry.refCount === 0) {
+			this.disposeEntry(entry);
+		}
+	}
+
+	private disposeEntry(entry: ManagedConnectionEntry): void {
+		if (entry.disposed) {
+			return;
+		}
+		entry.disposed = true;
+		if (this.entries.get(entry.key) === entry) {
+			this.entries.delete(entry.key);
+		}
+		if (entry.connection) {
+			entry.connection.dispose();
+			return;
+		}
+		entry.promise.then(connection => connection.dispose(), () => undefined);
+	}
+}
 
 export async function resolveSshRemoteAuthority(authority: string, options: ResolveSshRemoteOptions): Promise<ResolvedSshRemote> {
 	const target = parseSshRemoteAuthority(authority);
@@ -100,6 +215,11 @@ export async function resolveSshRemoteAuthority(authority: string, options: Reso
 		server?.dispose();
 		throw error;
 	}
+}
+
+function createConnectionKey(authority: string, commit: string): string {
+	const target = parseSshRemoteAuthority(authority);
+	return `${target.host}\0${commit}`;
 }
 
 // Keep structural compatibility explicit without exposing child_process in resolver tests.

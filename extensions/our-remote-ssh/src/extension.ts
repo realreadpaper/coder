@@ -13,19 +13,22 @@ import { parseRemoteAiError } from './logParser';
 import { createListDirectoryScript, joinRemotePath, parentRemotePath, parseRemoteDirectoryListing } from './remoteDirectory';
 import { selectTarballFromManifest, RemoteAiReleaseManifest } from './releaseManifest';
 import { resolveServerRelease } from './serverRelease';
-import { resolveSshRemoteAuthority, ResolvedSshRemote } from './resolver';
+import { ConnectionManager } from './resolver';
 import { parseSshConfig } from './sshConfig';
 import { createSshConfigEntry, createSshHostOptions, SshHostOption } from './sshHosts';
-import { sshExec, sshPipe } from './sshProcess';
-import { buildUnavailableCodexSshWrapperScript, createCodexSshWrapperPlan, isManagedCodexSshWrapper } from './codexUiWrapper';
+import { getSshMultiplexingDiagnostics, sshExec, sshPipe } from './sshProcess';
+import { buildPendingCodexSshWrapperScript, buildUnavailableCodexSshWrapperScript, CodexSshWrapperPlan, createCodexSshWrapperPlan, isManagedCodexSshWrapper } from './codexUiWrapper';
 import { isSameRemoteWorkspace, normalizeRemotePath } from './workspaceTarget';
 import { AuraRuntimeManifest, defaultAuraRuntimeManifest, parseAuraRuntimeManifest, selectProviderPlatform } from './auraRuntimeManifest';
 import { buildAuraRuntimeInstallScript, buildAuraRuntimeProbeScript, buildAuraRuntimeRemoteDownloadScript, createAuraRuntimeUploadPlan, parseAuraRuntimeProbeOutput } from './auraRuntimeInstaller';
 import { createAuraRuntimeEnsurePlan } from './auraRuntimeBinding';
 import { AuraRuntimeSource, chooseAuraRuntimeSource, downloadAuraRuntime, hashAuraRuntimeFile } from './auraRuntimeSource';
 import { buildCodexCredentialSyncPayload, buildCodexCredentialSyncScript, codexCredentialRelativePaths, CodexCredentialSourceFile } from './codexCredentials';
+import { patchInstalledCodexExtension } from './codexInstalledExtensionPatch';
 import { codexSecondarySidebarSupportContext, codexSidebarPlacementDelays, shouldForceCodexSecondarySidebar } from './codexSidebarPlacement';
+import { CodexRuntimeStateMachine, createCodexRuntimeMarkerPath } from './codexRuntimeStateMachine';
 import * as fs from 'fs';
+import * as net from 'net';
 import * as os from 'os';
 import * as path from 'path';
 
@@ -34,7 +37,7 @@ export function activate(context: vscode.ExtensionContext): void {
 	context.subscriptions.push(output);
 	const codexRuntimeStatus = createCodexRuntimeStatusBarItem();
 	context.subscriptions.push(codexRuntimeStatus);
-	const activeConnections = new Set<ResolvedSshRemote>();
+	const connectionManager = new ConnectionManager();
 
 	const auditLog = new AuditLogWriter(vscode.Uri.joinPath(context.globalStorageUri, 'remote-ai-audit.jsonl').fsPath, {
 		sessionId: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
@@ -48,6 +51,7 @@ export function activate(context: vscode.ExtensionContext): void {
 	});
 
 	configureCodexSidebarPlacement(context, output, auditLog);
+	configureInstalledCodexExtensionPatch(context, output, auditLog);
 	void configureCodexUiForWorkspace(context, output, auditLog, codexRuntimeStatus);
 	context.subscriptions.push(vscode.workspace.onDidChangeWorkspaceFolders(() => {
 		void configureCodexUiForWorkspace(context, output, auditLog, codexRuntimeStatus);
@@ -98,8 +102,11 @@ export function activate(context: vscode.ExtensionContext): void {
 			return;
 		}
 
-		await configureCodexUiForSshTarget(context, output, auditLog, codexRuntimeStatus, host, remotePath);
+		await configurePendingCodexUiForSshTarget(context, output, auditLog, codexRuntimeStatus, host, remotePath);
 		await openRemoteFolder(host, remotePath);
+		void configureCodexUiForSshTarget(context, output, auditLog, codexRuntimeStatus, host, remotePath).catch(error => {
+			output.appendLine(`Aura Code runtime preparation failed after opening SSH workspace: ${error instanceof Error ? error.message : String(error)}`);
+		});
 	};
 
 	context.subscriptions.push(vscode.commands.registerCommand('opensshremotes.openEmptyWindowInCurrentWindow', connectCommand));
@@ -131,19 +138,18 @@ export function activate(context: vscode.ExtensionContext): void {
 				if (!serverTarballPath) {
 					throw new Error('Aura Code could not find a bundled remote server release. Run scripts/remote-ai-package-release.sh before scripts/remote-ai-package-darwin.sh, or configure remoteai.ssh.serverManifestPath.');
 				}
-				const resolved = await resolveSshRemoteAuthority(authority, {
+				const resolved = await connectionManager.acquire(authority, {
 					commit,
 					connectionToken,
 					localTarballPath: serverTarballPath,
 					sha256: release.sha256,
 					sshPath,
-					auditLog
+					auditLog,
+					healthCheck: connection => isLocalPortReachable(connection.authority.host, connection.authority.port)
 				});
-				activeConnections.add(resolved);
 				context.subscriptions.push({
 					dispose: () => {
 						resolved.dispose();
-						activeConnections.delete(resolved);
 					}
 				});
 
@@ -171,10 +177,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
 	context.subscriptions.push({
 		dispose: () => {
-			for (const connection of activeConnections) {
-				connection.dispose();
-			}
-			activeConnections.clear();
+			connectionManager.dispose();
 		}
 	});
 }
@@ -183,6 +186,30 @@ export function deactivate(): void { }
 
 function getSshConfiguration(): vscode.WorkspaceConfiguration {
 	return vscode.workspace.getConfiguration('remoteai.ssh');
+}
+
+function isLocalPortReachable(host: string, port: number, timeoutMs = 1000): Promise<boolean> {
+	return new Promise(resolve => {
+		const socket = net.createConnection({ host, port });
+		let settled = false;
+		const finish = (healthy: boolean): void => {
+			if (settled) {
+				return;
+			}
+			settled = true;
+			socket.destroy();
+			resolve(healthy);
+		};
+		const timer = setTimeout(() => finish(false), timeoutMs);
+		socket.once('connect', () => {
+			clearTimeout(timer);
+			finish(true);
+		});
+		socket.once('error', () => {
+			clearTimeout(timer);
+			finish(false);
+		});
+	});
 }
 
 type CodexRuntimeStatusState =
@@ -223,6 +250,52 @@ function updateCodexRuntimeStatus(item: vscode.StatusBarItem, state: CodexRuntim
 	item.tooltip = `Remote Codex CLI is not active for ${state.host}:${state.remotePath}\n${state.reason}`;
 	item.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
 	item.show();
+}
+
+function configureInstalledCodexExtensionPatch(
+	context: vscode.ExtensionContext,
+	output: vscode.OutputChannel,
+	auditLog: AuditLogWriter
+): void {
+	const patchInstalledCodex = async (extensionId?: string) => {
+		if (!shouldForceCodexSecondarySidebar(extensionId)) {
+			return;
+		}
+		for (const extension of vscode.extensions.all) {
+			if (extension.id.toLowerCase() !== 'openai.chatgpt') {
+				continue;
+			}
+			try {
+				const result = patchInstalledCodexExtension(extension.extensionPath);
+				if (!result.patched) {
+					continue;
+				}
+				output.appendLine(`Patched installed Codex extension for Aura secondary sidebar: ${result.extensionPath}`);
+				await auditLog.record({
+					operation: 'codex.extension.patch',
+					status: 'succeeded',
+					metadata: {
+						extensionPath: result.extensionPath,
+						packagePatched: result.packagePatched,
+						bundlePatched: result.bundlePatched
+					}
+				});
+			} catch (error) {
+				const message = error instanceof Error ? error.message : String(error);
+				output.appendLine(`Unable to patch installed Codex extension: ${message}`);
+				await auditLog.record({
+					operation: 'codex.extension.patch',
+					status: 'failed',
+					metadata: { error: message }
+				});
+			}
+		}
+	};
+
+	void patchInstalledCodex();
+	context.subscriptions.push(vscode.extensions.onDidChange(() => {
+		void patchInstalledCodex('openai.chatgpt');
+	}));
 }
 
 function configureCodexSidebarPlacement(
@@ -288,6 +361,54 @@ async function configureCodexUiForSshTarget(
 	}));
 }
 
+async function configurePendingCodexUiForSshTarget(
+	context: vscode.ExtensionContext,
+	output: vscode.OutputChannel,
+	auditLog: AuditLogWriter,
+	codexRuntimeStatus: vscode.StatusBarItem,
+	host: string,
+	remotePath: string
+): Promise<void> {
+	const normalizedRemotePath = normalizeRemotePath(remotePath);
+	const codexConfiguration = vscode.workspace.getConfiguration('remoteai.codex');
+	const sandboxMode = codexConfiguration.get<'read-only' | 'workspace-write' | 'danger-full-access'>('sandboxMode') || 'danger-full-access';
+	const bypassApprovalsAndSandbox = codexConfiguration.get<boolean>('bypassApprovalsAndSandbox') ?? false;
+	const plan = createCodexSshWrapperPlan({
+		globalStoragePath: context.globalStorageUri.fsPath,
+		workspaceFolderUri: vscode.Uri.from({
+			scheme: 'vscode-remote',
+			authority: toSshRemoteAuthority(host),
+			path: normalizedRemotePath
+		}),
+		remoteCliPath: codexConfiguration.get<string>('remoteCliPath') || '',
+		sandboxMode,
+		bypassApprovalsAndSandbox
+	});
+	if (!plan) {
+		return;
+	}
+	const pendingPlan = {
+		...plan,
+		remoteCliPath: '',
+		script: buildPendingCodexSshWrapperScript({
+			host: plan.host,
+			remotePath: plan.remotePath
+		})
+	};
+	await writeCodexWrapper(pendingPlan.wrapperPath, pendingPlan.script);
+	const chatgptConfiguration = vscode.workspace.getConfiguration('chatgpt');
+	await setChatGptCliExecutable(context, chatgptConfiguration, pendingPlan.wrapperPath);
+	updateCodexRuntimeStatus(codexRuntimeStatus, { kind: 'checking', host: plan.host, remotePath: plan.remotePath });
+	output.appendLine(`Installed pending Codex wrapper for ${plan.host}:${plan.remotePath}`);
+	await auditLog.record({
+		operation: 'codex.ui.configure',
+		status: 'started',
+		authority: `ssh-remote+${encodeURIComponent(plan.host)}`,
+		workspaceRoot: plan.remotePath,
+		metadata: { wrapperPath: pendingPlan.wrapperPath, mode: 'pending' }
+	});
+}
+
 async function configureCodexUiForWorkspaceUri(
 	context: vscode.ExtensionContext,
 	output: vscode.OutputChannel,
@@ -297,11 +418,13 @@ async function configureCodexUiForWorkspaceUri(
 ): Promise<void> {
 	const codexConfiguration = vscode.workspace.getConfiguration('remoteai.codex');
 	const sandboxMode = codexConfiguration.get<'read-only' | 'workspace-write' | 'danger-full-access'>('sandboxMode') || 'danger-full-access';
-	let plan = createCodexSshWrapperPlan({
+	const bypassApprovalsAndSandbox = codexConfiguration.get<boolean>('bypassApprovalsAndSandbox') ?? false;
+	const plan = createCodexSshWrapperPlan({
 		globalStoragePath: context.globalStorageUri.fsPath,
 		workspaceFolderUri,
 		remoteCliPath: codexConfiguration.get<string>('remoteCliPath') || '',
-		sandboxMode
+		sandboxMode,
+		bypassApprovalsAndSandbox
 	});
 	const chatgptConfiguration = vscode.workspace.getConfiguration('chatgpt');
 	const currentCliExecutable = chatgptConfiguration.get<string>('cliExecutable') || '';
@@ -325,177 +448,224 @@ async function configureCodexUiForWorkspaceUri(
 		return;
 	}
 
+	let activePlan: CodexSshWrapperPlan = plan;
 	const sshPath = getSshConfiguration().get<string>('sshPath') || 'ssh';
-	const remoteHost = plan.host;
-	updateCodexRuntimeStatus(codexRuntimeStatus, { kind: 'checking', host: remoteHost, remotePath: plan.remotePath });
+	const remoteHost = activePlan.host;
+	const runtimeState = new CodexRuntimeStateMachine({
+		host: remoteHost,
+		remotePath: activePlan.remotePath,
+		markerPath: createCodexRuntimeMarkerPath(context.globalStorageUri.fsPath, remoteHost, activePlan.remotePath),
+		onTransition: async marker => {
+			await auditLog.record({
+				operation: 'aura.runtime.stage',
+				status: marker.status,
+				authority: `ssh-remote+${encodeURIComponent(remoteHost)}`,
+				workspaceRoot: activePlan.remotePath,
+				metadata: { stage: marker.stage, details: marker.details, error: marker.error }
+			});
+		}
+	});
+	updateCodexRuntimeStatus(codexRuntimeStatus, { kind: 'checking', host: remoteHost, remotePath: activePlan.remotePath });
 	try {
-		const probeResult = await sshExec(remoteHost, buildAuraRuntimeProbeScript(), { sshPath });
+		const probeResult = await runtimeState.runStage('probe', {}, () => sshExec(remoteHost, buildAuraRuntimeProbeScript(), { sshPath }));
 		if (probeResult.code !== 0) {
 			throw new Error(`Aura runtime probe failed\nstdout:\n${probeResult.stdout}\nstderr:\n${probeResult.stderr}`);
 		}
 		const probe = parseAuraRuntimeProbeOutput(probeResult.stdout);
 		const runtimeConfiguration = vscode.workspace.getConfiguration('aura.runtime');
-		const runtimeManifest = await resolveAuraRuntimeManifest(runtimeConfiguration);
-		const runtimePlatform = selectProviderPlatform(runtimeManifest, 'codex', probe.platformKey);
-		const ensurePlan = createAuraRuntimeEnsurePlan({
-			providerId: 'codex',
-			home: probe.home,
-			platformKey: probe.platformKey,
-			configuredRemoteCliPath: codexConfiguration.get<string>('remoteCliPath') || '',
-			registry: probe.registry,
-			requiredVersion: runtimePlatform.version,
-			binRelativePath: runtimePlatform.binPath
+		const selection = await runtimeState.runStage('select', { platformKey: probe.platformKey }, async () => {
+			const runtimeManifest = await resolveAuraRuntimeManifest(runtimeConfiguration);
+			const runtimePlatform = selectProviderPlatform(runtimeManifest, 'codex', probe.platformKey);
+			const ensurePlan = createAuraRuntimeEnsurePlan({
+				providerId: 'codex',
+				home: probe.home,
+				platformKey: probe.platformKey,
+				configuredRemoteCliPath: codexConfiguration.get<string>('remoteCliPath') || '',
+				registry: probe.registry,
+				requiredVersion: runtimePlatform.version,
+				binRelativePath: runtimePlatform.binPath
+			});
+			const remoteCliPath = ensurePlan.action === 'install' ? ensurePlan.target.binPath : ensurePlan.binPath;
+			return { runtimePlatform, ensurePlan, remoteCliPath };
 		});
-		const remoteCliPath = ensurePlan.action === 'install' ? ensurePlan.target.binPath : ensurePlan.binPath;
+		const { runtimePlatform, ensurePlan, remoteCliPath } = selection;
 		if (ensurePlan.action === 'install') {
 			const bundledRoot = await resolveAuraRuntimeBundledRoot(runtimeConfiguration, context.extensionUri.fsPath);
 			const cachePath = path.join(context.globalStorageUri.fsPath, 'runtimes', 'cache', 'codex', `${runtimePlatform.version}-${probe.platformKey}.tar.gz`);
 			const bundledPath = path.join(bundledRoot, runtimePlatform.bundledPath);
-			const source = chooseAuraRuntimeSource({
-				providerId: 'codex',
-				platformKey: probe.platformKey,
-				version: runtimePlatform.version,
-				cachePath,
-				cacheExists: await pathExists(cachePath),
-				bundledPath,
-				bundledExists: await pathExists(bundledPath),
-				officialUrl: runtimePlatform.officialUrl,
-				mirrorUrl: runtimePlatform.mirrorUrl,
-				networkAvailable: runtimeConfiguration.get<boolean>('networkEnabled') ?? true,
-				remoteDownloadEnabled: runtimeConfiguration.get<boolean>('remoteDownloadEnabled') ?? true
-			});
 			const upload = createAuraRuntimeUploadPlan({
 				home: probe.home,
 				providerId: 'codex',
 				version: runtimePlatform.version,
 				platformKey: probe.platformKey
 			});
-			let installSourceKind = source.kind;
-			const uploadLocalRuntime = async (localSource: Exclude<AuraRuntimeSource, { readonly kind: 'remoteDownload' }>) => {
-				const localTarballPath = localSource.kind === 'download'
-					? await downloadAuraRuntime(localSource.url, localSource.cachePath)
-					: localSource.path;
-				const actualSha256 = await hashAuraRuntimeFile(localTarballPath);
-				if (runtimePlatform.sha256 !== '0000000000000000000000000000000000000000000000000000000000000000' && actualSha256 !== runtimePlatform.sha256) {
-					throw new Error(`Aura runtime sha256 mismatch for ${localTarballPath}: ${actualSha256}`);
-				}
-				const tarball = await fs.promises.readFile(localTarballPath);
-				const uploadResult = await sshPipe(remoteHost, upload.remoteCommand, { input: tarball, sshPath });
-				if (uploadResult.code !== 0) {
-					throw new Error(`Aura runtime upload failed\nstdout:\n${uploadResult.stdout}\nstderr:\n${uploadResult.stderr}`);
-				}
-			};
-			if (source.kind === 'remoteDownload') {
-				const downloadResult = await sshExec(remoteHost, buildAuraRuntimeRemoteDownloadScript({
-					url: source.url,
-					remotePath: upload.remotePath
-				}), { sshPath, timeoutMs: 120_000 });
-				if (downloadResult.code !== 0) {
-					output.appendLine(`Aura runtime remote download failed; falling back to local download/upload.\nstdout:\n${downloadResult.stdout}\nstderr:\n${downloadResult.stderr}`);
-					const fallbackSource = chooseAuraRuntimeSource({
-						providerId: 'codex',
-						platformKey: probe.platformKey,
-						version: runtimePlatform.version,
-						cachePath,
-						cacheExists: await pathExists(cachePath),
-						bundledPath,
-						bundledExists: await pathExists(bundledPath),
-						officialUrl: runtimePlatform.officialUrl,
-						mirrorUrl: runtimePlatform.mirrorUrl,
-						networkAvailable: runtimeConfiguration.get<boolean>('networkEnabled') ?? true,
-						remoteDownloadEnabled: false
-					});
-					if (fallbackSource.kind === 'remoteDownload') {
-						throw new Error('Aura runtime fallback source unexpectedly selected remote download.');
+			const installSourceKind = await runtimeState.runStage('fetch', {
+				version: runtimePlatform.version,
+				platformKey: probe.platformKey
+			}, async () => {
+				const source = chooseAuraRuntimeSource({
+					providerId: 'codex',
+					platformKey: probe.platformKey,
+					version: runtimePlatform.version,
+					cachePath,
+					cacheExists: await pathExists(cachePath),
+					bundledPath,
+					bundledExists: await pathExists(bundledPath),
+					officialUrl: runtimePlatform.officialUrl,
+					mirrorUrl: runtimePlatform.mirrorUrl,
+					networkAvailable: runtimeConfiguration.get<boolean>('networkEnabled') ?? true,
+					remoteDownloadEnabled: runtimeConfiguration.get<boolean>('remoteDownloadEnabled') ?? true
+				});
+				const uploadLocalRuntime = async (localSource: Exclude<AuraRuntimeSource, { readonly kind: 'remoteDownload' }>) => {
+					const localTarballPath = localSource.kind === 'download'
+						? await downloadAuraRuntime(localSource.url, localSource.cachePath)
+						: localSource.path;
+					const actualSha256 = await hashAuraRuntimeFile(localTarballPath);
+					if (runtimePlatform.sha256 !== '0000000000000000000000000000000000000000000000000000000000000000' && actualSha256 !== runtimePlatform.sha256) {
+						throw new Error(`Aura runtime sha256 mismatch for ${localTarballPath}: ${actualSha256}`);
 					}
-					installSourceKind = fallbackSource.kind;
-					await uploadLocalRuntime(fallbackSource);
+					const tarball = await fs.promises.readFile(localTarballPath);
+					const uploadResult = await sshPipe(remoteHost, upload.remoteCommand, { input: tarball, sshPath });
+					if (uploadResult.code !== 0) {
+						throw new Error(`Aura runtime upload failed\nstdout:\n${uploadResult.stdout}\nstderr:\n${uploadResult.stderr}`);
+					}
+				};
+				if (source.kind === 'remoteDownload') {
+					const downloadResult = await sshExec(remoteHost, buildAuraRuntimeRemoteDownloadScript({
+						url: source.url,
+						remotePath: upload.remotePath
+					}), { sshPath, timeoutMs: 120_000 });
+					if (downloadResult.code !== 0) {
+						output.appendLine(`Aura runtime remote download failed; falling back to local download/upload.\nstdout:\n${downloadResult.stdout}\nstderr:\n${downloadResult.stderr}`);
+						const fallbackSource = chooseAuraRuntimeSource({
+							providerId: 'codex',
+							platformKey: probe.platformKey,
+							version: runtimePlatform.version,
+							cachePath,
+							cacheExists: await pathExists(cachePath),
+							bundledPath,
+							bundledExists: await pathExists(bundledPath),
+							officialUrl: runtimePlatform.officialUrl,
+							mirrorUrl: runtimePlatform.mirrorUrl,
+							networkAvailable: runtimeConfiguration.get<boolean>('networkEnabled') ?? true,
+							remoteDownloadEnabled: false
+						});
+						if (fallbackSource.kind === 'remoteDownload') {
+							throw new Error('Aura runtime fallback source unexpectedly selected remote download.');
+						}
+						await uploadLocalRuntime(fallbackSource);
+						return fallbackSource.kind;
+					}
+				} else {
+					await uploadLocalRuntime(source);
 				}
-			} else {
-				await uploadLocalRuntime(source);
-			}
-			const installResult = await sshExec(remoteHost, buildAuraRuntimeInstallScript({
-				providerId: 'codex',
+				return source.kind;
+			});
+			await runtimeState.runStage('install', {
 				version: runtimePlatform.version,
 				platformKey: probe.platformKey,
-				uploadPath: upload.remotePath,
-				installDir: ensurePlan.target.installDir,
-				binRelativePath: ensurePlan.target.binRelativePath,
-				sha256: runtimePlatform.sha256,
 				sourceKind: installSourceKind
-			}), { sshPath, timeoutMs: 120_000 });
-			if (installResult.code !== 0) {
-				throw new Error(`Aura runtime install failed\nstdout:\n${installResult.stdout}\nstderr:\n${installResult.stderr}`);
-			}
+			}, async () => {
+				const installResult = await sshExec(remoteHost, buildAuraRuntimeInstallScript({
+					providerId: 'codex',
+					version: runtimePlatform.version,
+					platformKey: probe.platformKey,
+					uploadPath: upload.remotePath,
+					installDir: ensurePlan.target.installDir,
+					binRelativePath: ensurePlan.target.binRelativePath,
+					sha256: runtimePlatform.sha256,
+					sourceKind: installSourceKind
+				}), { sshPath, timeoutMs: 120_000 });
+				if (installResult.code !== 0) {
+					throw new Error(`Aura runtime install failed\nstdout:\n${installResult.stdout}\nstderr:\n${installResult.stderr}`);
+				}
+			});
 		}
-		await syncCodexCredentialsForRemote(remoteHost, probe.home, sshPath, codexConfiguration, output, auditLog);
-		plan = createCodexSshWrapperPlan({
+		await runtimeState.runStage('verify', { remoteCliPath }, async () => {
+			const verifyResult = await sshExec(remoteHost, `remote_cli=${shellSingleQuote(remoteCliPath)}
+if [ ! -x "$remote_cli" ]; then
+	echo "Aura runtime binary is not executable: $remote_cli"
+	exit 88
+fi
+"$remote_cli" --version >/dev/null
+`, { sshPath });
+			if (verifyResult.code !== 0) {
+				throw new Error(`Aura runtime verify failed\nstdout:\n${verifyResult.stdout}\nstderr:\n${verifyResult.stderr}`);
+			}
+		});
+		await runtimeState.runStage('syncCredentials', {}, () => syncCodexCredentialsForRemote(remoteHost, probe.home, sshPath, codexConfiguration, output, auditLog));
+		activePlan = await runtimeState.runStage('bind', { remoteCliPath }, async () => createCodexSshWrapperPlan({
 			globalStoragePath: context.globalStorageUri.fsPath,
 			workspaceFolderUri,
 			remoteCliPath,
-			sandboxMode
-		}) ?? plan;
+			sandboxMode,
+			bypassApprovalsAndSandbox
+		}) ?? activePlan);
 		output.appendLine(`Aura Code selected Codex runtime: ${remoteCliPath}`);
-		updateCodexRuntimeStatus(codexRuntimeStatus, { kind: 'active', host: remoteHost, remotePath: plan.remotePath, remoteCliPath });
+		updateCodexRuntimeStatus(codexRuntimeStatus, { kind: 'active', host: remoteHost, remotePath: activePlan.remotePath, remoteCliPath });
 		await auditLog.record({
 			operation: 'aura.runtime.bind',
 			status: 'succeeded',
 			authority: `ssh-remote+${encodeURIComponent(remoteHost)}`,
-			workspaceRoot: plan.remotePath,
+			workspaceRoot: activePlan.remotePath,
 			metadata: { action: ensurePlan.action, remoteCliPath, platformKey: probe.platformKey }
 		});
 	} catch (error) {
 		const message = error instanceof Error ? error.message : String(error);
 		output.appendLine(`Aura Code runtime binding failed: ${message}`);
-		updateCodexRuntimeStatus(codexRuntimeStatus, { kind: 'unavailable', host: remoteHost, remotePath: plan.remotePath, reason: message });
+		updateCodexRuntimeStatus(codexRuntimeStatus, { kind: 'unavailable', host: remoteHost, remotePath: activePlan.remotePath, reason: message });
 		await auditLog.record({
 			operation: 'aura.runtime.bind',
 			status: 'failed',
 			authority: `ssh-remote+${encodeURIComponent(remoteHost)}`,
-			workspaceRoot: plan.remotePath,
+			workspaceRoot: activePlan.remotePath,
 			metadata: { error: message }
 		});
-		plan = {
-			...plan,
+		activePlan = {
+			...activePlan,
 			remoteCliPath: '',
 			script: buildUnavailableCodexSshWrapperScript({
-				host: plan.host,
-				remotePath: plan.remotePath,
+				host: activePlan.host,
+				remotePath: activePlan.remotePath,
 				reason: message
 			})
 		};
 	}
 
-	await fs.promises.mkdir(path.dirname(plan.wrapperPath), { recursive: true });
-	await fs.promises.writeFile(plan.wrapperPath, plan.script, { mode: 0o755 });
-	await fs.promises.chmod(plan.wrapperPath, 0o755);
-	if (currentCliExecutable !== plan.wrapperPath) {
+	await writeCodexWrapper(activePlan.wrapperPath, activePlan.script);
+	if (currentCliExecutable !== activePlan.wrapperPath) {
 		try {
-			await setChatGptCliExecutable(context, chatgptConfiguration, plan.wrapperPath);
+			await setChatGptCliExecutable(context, chatgptConfiguration, activePlan.wrapperPath);
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
 			output.appendLine(`Unable to configure Codex sidebar CLI setting: ${message}`);
-			updateCodexRuntimeStatus(codexRuntimeStatus, { kind: 'unavailable', host: plan.host, remotePath: plan.remotePath, reason: message });
+			updateCodexRuntimeStatus(codexRuntimeStatus, { kind: 'unavailable', host: activePlan.host, remotePath: activePlan.remotePath, reason: message });
 			await auditLog.record({
 				operation: 'codex.ui.configure',
 				status: 'failed',
-				authority: `ssh-remote+${encodeURIComponent(plan.host)}`,
-				workspaceRoot: plan.remotePath,
-				metadata: { wrapperPath: plan.wrapperPath, remoteCliPath: plan.remoteCliPath, error: message }
+				authority: `ssh-remote+${encodeURIComponent(activePlan.host)}`,
+				workspaceRoot: activePlan.remotePath,
+				metadata: { wrapperPath: activePlan.wrapperPath, remoteCliPath: activePlan.remoteCliPath, error: message }
 			});
 			return;
 		}
-		output.appendLine(`Configured Codex sidebar for ${plan.host}:${plan.remotePath}`);
-		output.appendLine(`Codex UI wrapper: ${plan.wrapperPath}`);
-		await auditLog.record({
-			operation: 'codex.ui.configure',
-			status: 'succeeded',
-			authority: `ssh-remote+${encodeURIComponent(plan.host)}`,
-			workspaceRoot: plan.remotePath,
-			metadata: { wrapperPath: plan.wrapperPath, remoteCliPath: plan.remoteCliPath }
-		});
-		output.appendLine('Aura configured the Codex sidebar for this SSH workspace before Codex starts.');
 	}
+	output.appendLine(`Configured Codex sidebar for ${activePlan.host}:${activePlan.remotePath}`);
+	output.appendLine(`Codex UI wrapper: ${activePlan.wrapperPath}`);
+	await auditLog.record({
+		operation: 'codex.ui.configure',
+		status: 'succeeded',
+		authority: `ssh-remote+${encodeURIComponent(activePlan.host)}`,
+		workspaceRoot: activePlan.remotePath,
+		metadata: { wrapperPath: activePlan.wrapperPath, remoteCliPath: activePlan.remoteCliPath, mode: 'active' }
+	});
+	output.appendLine('Aura configured the Codex sidebar for this SSH workspace before Codex starts.');
+}
+
+async function writeCodexWrapper(wrapperPath: string, script: string): Promise<void> {
+	await fs.promises.mkdir(path.dirname(wrapperPath), { recursive: true });
+	await fs.promises.writeFile(wrapperPath, script, { mode: 0o755 });
+	await fs.promises.chmod(wrapperPath, 0o755);
 }
 
 async function setChatGptCliExecutable(
@@ -1047,6 +1217,7 @@ async function showDiagnostics(context: vscode.ExtensionContext): Promise<void> 
 		hostOptions: readSshHostOptions(),
 		recentConnections: context.globalState.get<ConnectionHistoryEntry[]>('remoteai.ssh.connectionHistory') ?? [],
 		auditPath,
+		sshMultiplexing: getSshMultiplexingDiagnostics(),
 		manifest: await readManifestStatus(manifestPath)
 	});
 	const document = await vscode.workspace.openTextDocument({ content: report, language: 'markdown' });
@@ -1095,6 +1266,10 @@ function readSshHostOptions(): string[] {
 
 function sshConfigPath(): string {
 	return path.join(os.homedir(), '.ssh', 'config');
+}
+
+function shellSingleQuote(value: string): string {
+	return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
 function createNonce(): string {

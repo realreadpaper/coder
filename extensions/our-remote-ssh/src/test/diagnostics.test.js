@@ -24,6 +24,12 @@ suite('RemoteAI diagnostics', () => {
 			hostOptions: ['dev', 'prod'],
 			recentConnections: [{ host: 'dev', remotePath: '/home/dev/project', lastUsed: '2026-05-03T09:00:00.000Z' }],
 			auditPath: '/audit/remote-ai-audit.jsonl',
+			sshMultiplexing: {
+				mode: 'auto',
+				controlDir: '/tmp/aura-ssh-control',
+				controlPath: '/tmp/aura-ssh-control/%C',
+				fallback: 'on-compatibility-error'
+			},
 			manifest: {
 				ok: true,
 				commit: 'dev-compat',
@@ -42,6 +48,9 @@ suite('RemoteAI diagnostics', () => {
 		assert.ok(report.includes('- Tarball: /release/vscode-reh-linux-x64.tar.gz'));
 		assert.ok(report.includes('- SSH hosts: dev, prod'));
 		assert.ok(report.includes('- Recent: dev /home/dev/project'));
+		assert.ok(report.includes('- SSH multiplexing: auto'));
+		assert.ok(report.includes('- SSH control path: /tmp/aura-ssh-control/%C'));
+		assert.ok(report.includes('- SSH multiplex fallback: on-compatibility-error'));
 	});
 
 	test('renders manifest errors without throwing', () => {
@@ -61,6 +70,12 @@ suite('RemoteAI diagnostics', () => {
 			hostOptions: [],
 			recentConnections: [],
 			auditPath: '/audit/remote-ai-audit.jsonl',
+			sshMultiplexing: {
+				mode: 'auto',
+				controlDir: '/tmp/aura-ssh-control',
+				controlPath: '/tmp/aura-ssh-control/%C',
+				fallback: 'on-compatibility-error'
+			},
 			manifest: {
 				ok: false,
 				errors: ['missing manifest: /missing/manifest.json']

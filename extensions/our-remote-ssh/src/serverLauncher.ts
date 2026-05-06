@@ -6,10 +6,13 @@
 import { ChildProcess, spawn } from 'child_process';
 import { AuditLogWriter } from './auditLog';
 import { parseServerListening, ServerEndpoint } from './logParser';
+import { buildSshArgs } from './sshProcess';
 
 export interface ServerLaunchOptions {
 	readonly sshPath?: string;
 	readonly timeoutMs?: number;
+	readonly killAfterMs?: number;
+	readonly maxOutputBytes?: number;
 	readonly connectionToken: string;
 	readonly serverDataDir?: string;
 	readonly extensionsDir?: string;
@@ -29,6 +32,8 @@ export async function launchRemoteServer(
 ): Promise<LaunchedRemoteServer> {
 	const sshPath = options.sshPath ?? 'ssh';
 	const timeoutMs = options.timeoutMs ?? 30_000;
+	const killAfterMs = options.killAfterMs ?? 2_000;
+	const maxOutputBytes = options.maxOutputBytes ?? 1024 * 1024;
 	const command = createServerCommand(serverDir, options);
 
 	await auditLog.record({
@@ -39,9 +44,11 @@ export async function launchRemoteServer(
 	});
 
 	return new Promise((resolve, reject) => {
-		const child = spawn(sshPath, ['-T', host, command], { stdio: ['ignore', 'pipe', 'pipe'] });
+		const child = spawn(sshPath, buildSshArgs(['-T', host, command]), { stdio: ['ignore', 'pipe', 'pipe'] });
 		let output = '';
+		let outputBytes = 0;
 		let settled = false;
+		let killTimer: NodeJS.Timeout | undefined;
 
 		const fail = async (error: Error): Promise<void> => {
 			if (settled) {
@@ -49,7 +56,13 @@ export async function launchRemoteServer(
 			}
 			settled = true;
 			clearTimeout(timer);
+			if (killTimer) {
+				clearTimeout(killTimer);
+			}
 			child.kill('SIGTERM');
+			killTimer = setTimeout(() => {
+				child.kill('SIGKILL');
+			}, killAfterMs);
 			await auditLog.record({
 				operation: 'server.launch',
 				status: 'failed',
@@ -64,6 +77,15 @@ export async function launchRemoteServer(
 		}, timeoutMs);
 
 		const consume = (chunk: Buffer): void => {
+			outputBytes += chunk.length;
+			if (outputBytes > maxOutputBytes) {
+				const remaining = Math.max(0, maxOutputBytes - Buffer.byteLength(output));
+				if (remaining > 0) {
+					output += chunk.subarray(0, remaining).toString();
+				}
+				void fail(new Error(`Remote server launch output exceeded ${maxOutputBytes} bytes`));
+				return;
+			}
 			output += chunk.toString();
 			const endpoint = parseServerListening(output);
 			if (!endpoint || settled) {
@@ -72,6 +94,9 @@ export async function launchRemoteServer(
 
 			settled = true;
 			clearTimeout(timer);
+			if (killTimer) {
+				clearTimeout(killTimer);
+			}
 			void auditLog.record({
 				operation: 'server.launch',
 				status: 'succeeded',

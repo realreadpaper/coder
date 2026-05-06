@@ -31,12 +31,16 @@ sleep 20
 			localPort: 45123,
 			skipReadyCheck: true
 		});
-		await waitForFile(argsPath);
+		await waitForFileLine(argsPath, 'dev');
 		tunnel.dispose();
 
 		const args = fs.readFileSync(argsPath, 'utf8').trim().split('\n');
 		const records = fs.readFileSync(auditPath, 'utf8').trim().split('\n').map(line => JSON.parse(line));
-		assert.deepStrictEqual(args, [
+		assert.ok(args.includes('ControlMaster=auto'));
+		assert.ok(args.includes('ControlPersist=10m'));
+		assert.ok(args.some(arg => arg.startsWith('ControlPath=')));
+		assert.ok(args.includes('ConnectTimeout=10'));
+		assert.deepStrictEqual(args.slice(-4), [
 			'-N',
 			'-L',
 			'127.0.0.1:45123:127.0.0.1:43210',
@@ -50,13 +54,16 @@ sleep 20
 	});
 });
 
-async function waitForFile(filePath) {
+async function waitForFileLine(filePath, expectedLine) {
 	const deadline = Date.now() + 5000;
 	while (Date.now() < deadline) {
 		if (fs.existsSync(filePath)) {
-			return;
+			const lines = fs.readFileSync(filePath, 'utf8').trim().split('\n');
+			if (lines.includes(expectedLine)) {
+				return;
+			}
 		}
 		await new Promise(resolve => setTimeout(resolve, 10));
 	}
-	throw new Error(`Timed out waiting for ${filePath}`);
+	throw new Error(`Timed out waiting for ${expectedLine} in ${filePath}`);
 }

@@ -44,6 +44,10 @@ fi
 		fs.writeFileSync(sshPath, `#!/usr/bin/env sh
 export HOME="${fakeHome}"
 export PATH="${dir}:$PATH"
+while [ "$1" = "-o" ]; do
+	shift
+	shift
+done
 if [ "$1" = "-T" ]; then
 	shift
 	shift

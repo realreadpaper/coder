@@ -24,6 +24,9 @@ sleep 20
 
 		const sshPath = path.join(dir, 'ssh');
 		fs.writeFileSync(sshPath, `#!/usr/bin/env sh
+while [ "$1" = "-o" ]; do
+	shift 2
+done
 if [ "$1" = "-T" ]; then
 	shift
 fi
@@ -61,6 +64,9 @@ exec sh -c "$*"
 
 		const sshPath = path.join(dir, 'ssh');
 		fs.writeFileSync(sshPath, `#!/usr/bin/env sh
+while [ "$1" = "-o" ]; do
+	shift 2
+done
 if [ "$1" = "-T" ]; then
 	shift
 fi
@@ -78,5 +84,37 @@ exec sh -c "$*"
 			timeoutMs: 20,
 			connectionToken: 'token-1'
 		}), /timed out/);
+	});
+
+	test('fails before accumulating unbounded launch output', async () => {
+		const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'remote-ai-launch-'));
+		const serverDir = path.join(dir, 'server');
+		const binDir = path.join(serverDir, 'bin');
+		fs.mkdirSync(binDir, { recursive: true });
+		fs.writeFileSync(path.join(binDir, 'remote-ai-server'), '#!/usr/bin/env sh\nprintf "1234567890\\n"\nsleep 20\n', { mode: 0o755 });
+
+		const sshPath = path.join(dir, 'ssh');
+		fs.writeFileSync(sshPath, `#!/usr/bin/env sh
+while [ "$1" = "-o" ]; do
+	shift 2
+done
+if [ "$1" = "-T" ]; then
+	shift
+fi
+shift
+exec sh -c "$*"
+`, { mode: 0o755 });
+
+		const auditLog = new AuditLogWriter(path.join(dir, 'audit.jsonl'), {
+			sessionId: 'launch-test',
+			actor: 'test'
+		});
+
+		await assert.rejects(() => launchRemoteServer('dev', serverDir, auditLog, {
+			sshPath,
+			timeoutMs: 3000,
+			connectionToken: 'token-1',
+			maxOutputBytes: 4
+		}), /output exceeded 4 bytes/);
 	});
 });
