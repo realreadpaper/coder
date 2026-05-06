@@ -14,18 +14,18 @@
     </linearGradient>
   </defs>
 
-  <!-- 圆角背景 -->
-  <rect x="0" y="0" width="512" height="512" rx="110" fill="url(#bg)"/>
-  
-  <!-- 内层深度感（微弱） -->
-  <rect x="60" y="60" width="392" height="392" rx="80" fill="#1F4E5C" opacity="0.3"/>
+  <!-- App shell: match the original Code OSS macOS icon footprint (~0.844 of the canvas). -->
+  <g transform="translate(40 40) scale(0.84375)">
+    <rect x="0" y="0" width="512" height="512" rx="110" fill="url(#bg)"/>
 
-  <!-- 主发光圆环（缺口设计） -->
-  <circle cx="256" cy="256" r="140" fill="none" stroke="url(#ring)" stroke-width="18" stroke-linecap="round" stroke-dasharray="880" stroke-dashoffset="250" transform="rotate(-30 256 256)"/>
+    <!-- 内层深度感（微弱） -->
+    <rect x="60" y="60" width="392" height="392" rx="80" fill="#1F4E5C" opacity="0.3"/>
+  </g>
 
-  <!-- 内部符号：横杠 -->
-  <rect x="220" y="310" width="80" height="24" rx="12" fill="#FFFFFF"/>
-  
-  <!-- 内部符号：箭头头部 -->
-  <path d="M200 210 L240 250 L200 290" fill="none" stroke="#FFFFFF" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Aura mark: intentionally smaller than the shell so Dock normalization keeps visual weight under control. -->
+  <g transform="translate(40 40) scale(0.84375) translate(256 256) scale(0.86) translate(-256 -256)">
+    <circle cx="256" cy="256" r="140" fill="none" stroke="url(#ring)" stroke-width="18" stroke-linecap="round" stroke-dasharray="880" stroke-dashoffset="250" transform="rotate(-30 256 256)"/>
+    <rect x="220" y="310" width="80" height="24" rx="12" fill="#FFFFFF"/>
+    <path d="M200 210 L240 250 L200 290" fill="none" stroke="#FFFFFF" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
 </svg>
