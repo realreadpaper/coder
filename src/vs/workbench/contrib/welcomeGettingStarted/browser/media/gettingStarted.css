@@ -1166,7 +1166,7 @@
 
 .monaco-workbench .part.editor > .content .gettingStartedContainer.aura-code-welcome .index-list.start-container li {
 	width: 258px;
-	height: 116px;
+	height: 104px;
 }
 
 .monaco-workbench .part.editor > .content .gettingStartedContainer.aura-code-welcome .index-list.start-container .button-link {
@@ -1175,17 +1175,17 @@
 	align-items: flex-start;
 	justify-content: space-between;
 	width: 100%;
-	height: 116px;
+	height: 104px;
 	box-sizing: border-box;
 	margin: 0;
-	padding: 22px 24px 20px;
+	padding: 18px 22px 18px;
 	border: 1px solid var(--vscode-welcomePage-tileBorder, var(--vscode-contrastBorder));
 	border-radius: 8px;
 	background: var(--vscode-welcomePage-tileBackground);
 	color: var(--vscode-foreground);
 	text-decoration: none;
-	line-height: 26px;
-	font-size: 22px;
+	line-height: 24px;
+	font-size: 18px;
 	font-weight: 500;
 }
 
@@ -1197,8 +1197,8 @@
 
 .monaco-workbench .part.editor > .content .gettingStartedContainer.aura-code-welcome .index-list.start-container .icon-widget {
 	top: 0;
-	font-size: 28px;
-	width: 32px;
+	font-size: 25px;
+	width: 28px;
 	padding-right: 0;
 	color: var(--vscode-foreground);
 	opacity: .86;
@@ -1221,7 +1221,7 @@
 	justify-content: flex-start;
 	gap: 14px;
 	padding: 0 18px;
-	font-size: 18px;
+	font-size: 16px;
 }
 
 .monaco-workbench .part.editor > .content .gettingStartedContainer.aura-code-welcome.width-constrained .index-list.start-container .icon-widget {
