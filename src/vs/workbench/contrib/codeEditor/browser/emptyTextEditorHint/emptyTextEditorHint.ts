@@ -39,15 +39,17 @@ export class EmptyTextEditorHintContribution extends Disposable implements IEdit
 	static readonly ID = 'editor.contrib.emptyTextEditorHint';
 
 	private textHintContentWidget: EmptyTextEditorHintContentWidget | undefined;
+	private readonly inlineChatSessionService: IInlineChatSessionService | undefined;
 
 	constructor(
 		protected readonly editor: ICodeEditor,
 		@IConfigurationService private readonly configurationService: IConfigurationService,
-		@IInlineChatSessionService private readonly inlineChatSessionService: IInlineChatSessionService,
 		@IChatAgentService private readonly chatAgentService: IChatAgentService,
 		@IInstantiationService private readonly instantiationService: IInstantiationService
 	) {
 		super();
+
+		this.inlineChatSessionService = this.instantiationService.invokeFunction(accessor => accessor.getIfExists(IInlineChatSessionService));
 
 		this._register(this.editor.onDidChangeModel(() => this.update()));
 		this._register(this.editor.onDidChangeModelLanguage(() => this.update()));
@@ -64,16 +66,18 @@ export class EmptyTextEditorHintContribution extends Disposable implements IEdit
 				this.update();
 			}
 		}));
-		this._register(inlineChatSessionService.onWillStartSession(editor => {
-			if (this.editor === editor) {
-				this.textHintContentWidget?.dispose();
-			}
-		}));
-		this._register(inlineChatSessionService.onDidEndSession(e => {
-			if (this.editor === e.editor) {
-				this.update();
-			}
-		}));
+		if (this.inlineChatSessionService) {
+			this._register(this.inlineChatSessionService.onWillStartSession(editor => {
+				if (this.editor === editor) {
+					this.textHintContentWidget?.dispose();
+				}
+			}));
+			this._register(this.inlineChatSessionService.onDidEndSession(e => {
+				if (this.editor === e.editor) {
+					this.update();
+				}
+			}));
+		}
 	}
 
 	protected shouldRenderHint() {
@@ -92,7 +96,7 @@ export class EmptyTextEditorHintContribution extends Disposable implements IEdit
 			return false;
 		}
 
-		if (this.inlineChatSessionService.getSession(this.editor, model.uri)) {
+		if (this.inlineChatSessionService?.getSession(this.editor, model.uri)) {
 			return false;
 		}
 
