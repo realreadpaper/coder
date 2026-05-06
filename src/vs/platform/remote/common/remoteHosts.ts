@@ -5,9 +5,10 @@
 
 import { Schemas } from '../../../base/common/network.js';
 import { URI } from '../../../base/common/uri.js';
+import { normalizeRemoteAuthority } from './remoteAuthorityResolver.js';
 
 export function getRemoteAuthority(uri: URI): string | undefined {
-	return uri.scheme === Schemas.vscodeRemote ? uri.authority : undefined;
+	return uri.scheme === Schemas.vscodeRemote ? normalizeRemoteAuthority(uri.authority) : undefined;
 }
 
 export function getRemoteName(authority: string): string;
@@ -17,6 +18,7 @@ export function getRemoteName(authority: string | undefined): string | undefined
 	if (!authority) {
 		return undefined;
 	}
+	authority = normalizeRemoteAuthority(authority);
 	const pos = authority.indexOf('+');
 	if (pos < 0) {
 		// e.g. localhost:8000

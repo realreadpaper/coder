@@ -10,7 +10,7 @@ import { Disposable } from '../../../base/common/lifecycle.js';
 import { RemoteAuthorities } from '../../../base/common/network.js';
 import { URI } from '../../../base/common/uri.js';
 import { IProductService } from '../../product/common/productService.js';
-import { IRemoteAuthorityResolverService, IRemoteConnectionData, RemoteConnectionType, ResolvedAuthority, ResolvedOptions, ResolverResult } from '../common/remoteAuthorityResolver.js';
+import { IRemoteAuthorityResolverService, IRemoteConnectionData, RemoteConnectionType, ResolvedAuthority, ResolvedOptions, ResolverResult, normalizeRemoteAuthority } from '../common/remoteAuthorityResolver.js';
 import { ElectronRemoteResourceLoader } from './electronRemoteResourceLoader.js';
 
 export class RemoteAuthorityResolverService extends Disposable implements IRemoteAuthorityResolverService {
@@ -36,6 +36,7 @@ export class RemoteAuthorityResolverService extends Disposable implements IRemot
 	}
 
 	resolveAuthority(authority: string): Promise<ResolverResult> {
+		authority = normalizeRemoteAuthority(authority);
 		if (!this._resolveAuthorityRequests.has(authority)) {
 			this._resolveAuthorityRequests.set(authority, new DeferredPromise());
 		}
@@ -56,6 +57,7 @@ export class RemoteAuthorityResolverService extends Disposable implements IRemot
 	}
 
 	getConnectionData(authority: string): IRemoteConnectionData | null {
+		authority = normalizeRemoteAuthority(authority);
 		if (!this._resolveAuthorityRequests.has(authority)) {
 			return null;
 		}
@@ -71,6 +73,7 @@ export class RemoteAuthorityResolverService extends Disposable implements IRemot
 	}
 
 	_clearResolvedAuthority(authority: string): void {
+		authority = normalizeRemoteAuthority(authority);
 		if (this._resolveAuthorityRequests.has(authority)) {
 			this._resolveAuthorityRequests.get(authority)!.cancel();
 			this._resolveAuthorityRequests.delete(authority);
@@ -78,6 +81,7 @@ export class RemoteAuthorityResolverService extends Disposable implements IRemot
 	}
 
 	_setResolvedAuthority(resolvedAuthority: ResolvedAuthority, options?: ResolvedOptions): void {
+		resolvedAuthority = { ...resolvedAuthority, authority: normalizeRemoteAuthority(resolvedAuthority.authority) };
 		if (this._resolveAuthorityRequests.has(resolvedAuthority.authority)) {
 			const request = this._resolveAuthorityRequests.get(resolvedAuthority.authority)!;
 			if (resolvedAuthority.connectTo.type === RemoteConnectionType.WebSocket) {
@@ -94,6 +98,7 @@ export class RemoteAuthorityResolverService extends Disposable implements IRemot
 	}
 
 	_setResolvedAuthorityError(authority: string, err: any): void {
+		authority = normalizeRemoteAuthority(authority);
 		if (this._resolveAuthorityRequests.has(authority)) {
 			const request = this._resolveAuthorityRequests.get(authority)!;
 			// Avoid that this error makes it to telemetry
@@ -102,6 +107,7 @@ export class RemoteAuthorityResolverService extends Disposable implements IRemot
 	}
 
 	_setAuthorityConnectionToken(authority: string, connectionToken: string): void {
+		authority = normalizeRemoteAuthority(authority);
 		this._connectionTokens.set(authority, connectionToken);
 		RemoteAuthorities.setConnectionToken(authority, connectionToken);
 		this._onDidChangeConnectionData.fire();

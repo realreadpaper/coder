@@ -26,4 +26,16 @@ suite('RemoteAI SSH workspace target', () => {
 		assert.strictEqual(isSameRemoteWorkspace(currentWorkspaceFolders, 'dev', '/home/hejianglong/other'), false);
 		assert.strictEqual(isSameRemoteWorkspace(currentWorkspaceFolders, 'prod', '/home/hejianglong/remote-ai-manual'), false);
 	});
+
+	test('detects current workspace when the ssh separator is URI encoded', () => {
+		const currentWorkspaceFolders = [{
+			uri: {
+				scheme: 'vscode-remote',
+				authority: 'ssh-remote%2Bdev',
+				path: '/home/hejianglong'
+			}
+		}];
+
+		assert.strictEqual(isSameRemoteWorkspace(currentWorkspaceFolders, 'dev', '/home/hejianglong'), true);
+	});
 });

@@ -11,6 +11,11 @@ suite('RemoteAI SSH authority', () => {
 		assert.deepStrictEqual(parseSshRemoteAuthority('ssh-remote+dev'), { host: 'dev' });
 	});
 
+	test('parses authorities whose remote separator was URI encoded', () => {
+		assert.deepStrictEqual(parseSshRemoteAuthority('ssh-remote%2Bdev'), { host: 'dev' });
+		assert.deepStrictEqual(parseSshRemoteAuthority('ssh-remote%2bdev'), { host: 'dev' });
+	});
+
 	test('encodes host with special characters', () => {
 		assert.strictEqual(toSshRemoteAuthority('dev.company.internal'), 'ssh-remote+dev.company.internal');
 	});

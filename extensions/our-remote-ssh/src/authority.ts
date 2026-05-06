@@ -8,13 +8,19 @@ export interface SshRemoteAuthority {
 }
 
 const sshRemoteAuthorityPrefix = 'ssh-remote+';
+const encodedSshRemoteAuthorityPrefixPattern = /^ssh-remote%2b/i;
+
+export function normalizeSshRemoteAuthority(authority: string): string {
+	return authority.replace(encodedSshRemoteAuthorityPrefixPattern, sshRemoteAuthorityPrefix);
+}
 
 export function parseSshRemoteAuthority(authority: string): SshRemoteAuthority {
-	if (!authority.startsWith(sshRemoteAuthorityPrefix)) {
+	const normalizedAuthority = normalizeSshRemoteAuthority(authority);
+	if (!normalizedAuthority.startsWith(sshRemoteAuthorityPrefix)) {
 		throw new Error(`Unsupported remote authority: ${authority}`);
 	}
 
-	const encodedHost = authority.slice(sshRemoteAuthorityPrefix.length);
+	const encodedHost = normalizedAuthority.slice(sshRemoteAuthorityPrefix.length);
 	if (!encodedHost || encodedHost.includes('/')) {
 		throw new Error(`Invalid SSH remote authority: ${authority}`);
 	}

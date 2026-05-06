@@ -164,9 +164,14 @@ export interface IRemoteAuthorityResolverService {
 }
 
 export function getRemoteAuthorityPrefix(remoteAuthority: string): string {
+	remoteAuthority = normalizeRemoteAuthority(remoteAuthority);
 	const plusIndex = remoteAuthority.indexOf('+');
 	if (plusIndex === -1) {
 		return remoteAuthority;
 	}
 	return remoteAuthority.substring(0, plusIndex);
+}
+
+export function normalizeRemoteAuthority(remoteAuthority: string): string {
+	return remoteAuthority.replace(/%2b/i, '+');
 }

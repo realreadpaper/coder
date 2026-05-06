@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { toSshRemoteAuthority } from './authority';
+import { normalizeSshRemoteAuthority, toSshRemoteAuthority } from './authority';
 
 export interface WorkspaceFolderLike {
 	uri: {
@@ -26,7 +26,7 @@ export function isSameRemoteWorkspace(workspaceFolders: readonly WorkspaceFolder
 	const targetPath = normalizeRemotePath(remotePath);
 	return Boolean(workspaceFolders?.some(folder =>
 		folder.uri.scheme === 'vscode-remote'
-		&& folder.uri.authority === authority
+		&& normalizeSshRemoteAuthority(folder.uri.authority) === authority
 		&& normalizeRemotePath(folder.uri.path) === targetPath
 	));
 }
