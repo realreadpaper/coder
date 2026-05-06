@@ -185,7 +185,7 @@ import { registerWorkbenchContribution2, WorkbenchPhase } from '../common/contri
 					localize('window.reopenFolders.one', "Reopen the last active window unless a folder, workspace or file is opened (e.g. from the command line). If a file is opened, it will replace any of the editors that were previously opened in a window."),
 					localize('window.reopenFolders.none', "Never reopen a window. Unless a folder or workspace is opened (e.g. from the command line), an empty window will appear.")
 				],
-				'default': 'all',
+				'default': 'none',
 				'scope': ConfigurationScope.APPLICATION,
 				'description': localize('restoreWindows', "Controls how windows and editors within are being restored when opening.")
 			},
