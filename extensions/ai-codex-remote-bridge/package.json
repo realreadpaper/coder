@@ -59,21 +59,6 @@
 					"type": "string",
 					"default": "",
 					"description": "Local Codex CLI path used only for local file workspaces. Leave empty to resolve codex from the local PATH."
-				},
-				"remoteai.codex.remoteCliPath": {
-					"type": "string",
-					"default": "",
-					"description": "Remote Linux Codex CLI path used when this extension runs in a RemoteAI SSH workspace. Leave empty to use the managed remote Linux install path."
-				},
-				"remoteai.codex.sandboxMode": {
-					"type": "string",
-					"enum": [
-						"read-only",
-						"workspace-write",
-						"danger-full-access"
-					],
-					"default": "danger-full-access",
-					"description": "Sandbox mode used by the Codex process in the current workspace execution host."
 				}
 			}
 		}

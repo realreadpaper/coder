@@ -31,8 +31,7 @@
 		],
 		"openai.chatgpt": [
 			"chatSessionsProvider",
-			"contribSecondarySidebar",
-			"languageModelProxy"
+			"contribSecondarySidebar"
 		],
 		"our.ai-codex-remote-bridge": [
 			"terminalDataWriteEvent"

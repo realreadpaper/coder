@@ -4,7 +4,10 @@
  *--------------------------------------------------------------------------------------------*/
 
 const assert = require('assert');
-const { buildCodexExecArgs } = require('../../out/codexTaskRunner');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const { buildCodexExecArgs, spawnCodex } = require('../../out/codexTaskRunner');
 
 suite('Codex task runner', () => {
 	test('builds a remote workspace exec command using local Codex config defaults', () => {
@@ -19,10 +22,19 @@ suite('Codex task runner', () => {
 			'/home/user/project',
 			'--sandbox',
 			'danger-full-access',
-			'--dangerously-bypass-approvals-and-sandbox',
 			'--skip-git-repo-check',
 			'Append a smoke line to README.md'
 		]);
+	});
+
+	test('only bypasses approvals and sandbox when explicitly requested', () => {
+		const args = buildCodexExecArgs({
+			workspaceRoot: '/home/user/project',
+			prompt: 'Append a smoke line to README.md',
+			bypassApprovalsAndSandbox: true
+		});
+
+		assert.ok(args.includes('--dangerously-bypass-approvals-and-sandbox'));
 	});
 
 	test('can write the last message to a known report path', () => {
@@ -58,10 +70,19 @@ suite('Codex task runner', () => {
 			'workspace-write',
 			'--add-dir',
 			'/Users/user/.remote-ai-server',
-			'--dangerously-bypass-approvals-and-sandbox',
 			'--skip-git-repo-check',
 			'Clean the local Codex cache'
 		]);
+	});
+
+	test('stops Codex commands that exceed the output limit', async () => {
+		const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'remote-ai-codex-runner-'));
+		const codexPath = path.join(dir, 'codex');
+		fs.writeFileSync(codexPath, '#!/usr/bin/env sh\nprintf "1234567890"\n', { mode: 0o755 });
+
+		await assert.rejects(() => spawnCodex(codexPath, [], {}, {
+			maxOutputBytes: 4
+		}), /output exceeded 4 bytes/);
 	});
 
 	test('does not prepend the current directory when codex is resolved from PATH', () => {

@@ -55,8 +55,7 @@ suite('RemoteAI product configuration', () => {
 		].sort());
 		assert.deepStrictEqual([...product.extensionEnabledApiProposals['openai.chatgpt']].sort(), [
 			'chatSessionsProvider',
-			'contribSecondarySidebar',
-			'languageModelProxy'
+			'contribSecondarySidebar'
 		].sort());
 	});
 

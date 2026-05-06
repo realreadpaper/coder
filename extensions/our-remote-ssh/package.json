@@ -120,6 +120,11 @@
 					"enum": ["read-only", "workspace-write", "danger-full-access"],
 					"default": "danger-full-access",
 					"description": "Sandbox mode passed to the remote Codex CLI wrapper."
+				},
+				"remoteai.codex.bypassApprovalsAndSandbox": {
+					"type": "boolean",
+					"default": false,
+					"description": "Pass --dangerously-bypass-approvals-and-sandbox to the remote Codex CLI wrapper. This is off by default."
 				}
 			}
 		},
