@@ -24,6 +24,10 @@ suite('Aura local macOS package scripts', () => {
 		assert.match(script, /tsc\s+-p\s+extensions\/our-remote-ssh\/tsconfig\.json/);
 		assert.match(script, /APP_EXTENSIONS_DIR/);
 		assert.match(script, /extensions\/our-remote-ssh/);
+		assert.match(script, /APP_NODE_MODULES_DIR/);
+		assert.match(script, /@vscode\/vsce-sign/);
+		assert.match(script, /@vscode\/vsce-sign-\$VSCODE_PLATFORM_ARCH/);
+		assert.match(script, /@vscode\/vsce-sign\/src\/postinstall\.js/);
 		assert.match(script, /DMG_STAGING_DIR/);
 		assert.match(script, /ln\s+-s\s+\/Applications\s+"\$DMG_STAGING_DIR\/Applications"/);
 		assert.match(script, /ditto\s+"\$APP_PATH"\s+"\$DMG_STAGING_DIR\/\$APP_NAME"/);

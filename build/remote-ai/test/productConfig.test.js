@@ -40,6 +40,12 @@ suite('RemoteAI product configuration', () => {
 		assert.strictEqual(product.extensionsGallery.resourceUrlTemplate, 'https://{publisher}.gallerycdn.vsassets.io/extensions/{publisher}/{name}/{version}/{path}');
 	});
 
+	test('ships the extension signature verifier required by marketplace installs', () => {
+		const rootPackage = require('../../../package.json');
+
+		assert.ok(rootPackage.dependencies['@vscode/vsce-sign']);
+	});
+
 	test('authorizes required proposed APIs', () => {
 		assert.deepStrictEqual([...product.extensionEnabledApiProposals['our.remote-ssh']].sort(), [
 			'contribRemoteHelp',

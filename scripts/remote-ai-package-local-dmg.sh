@@ -22,6 +22,7 @@ else
 fi
 
 VSCODE_ARCH="${VSCODE_ARCH:-$DEFAULT_ARCH}"
+VSCODE_PLATFORM_ARCH="darwin-$VSCODE_ARCH"
 OUT_ROOT="${REMOTE_AI_RELEASE_OUT:-$ROOT/.build/remote-ai-release}"
 APP_ROOT="${REMOTE_AI_DARWIN_APP_ROOT:-$ROOT/../VSCode-darwin-$VSCODE_ARCH}"
 APP_NAME="$(node -p "require('./product.json').nameLong + '.app'")"
@@ -34,6 +35,7 @@ APP_RELEASES_DIR="$APP_PATH/Contents/Resources/remote-releases"
 AURA_RUNTIME_SOURCE="$ROOT/resources/aura-code"
 APP_AURA_RUNTIME_DIR="$APP_PATH/Contents/Resources/aura-code"
 APP_EXTENSIONS_DIR="$APP_PATH/Contents/Resources/app/extensions"
+APP_NODE_MODULES_DIR="$APP_PATH/Contents/Resources/app/node_modules"
 CHECKSUM_PATH="$CLIENT_DIR/Aura-darwin-$VSCODE_ARCH-local-signed-SHA256SUMS.txt"
 
 cleanup_dmg_staging() {
@@ -71,6 +73,20 @@ npx tsc -p extensions/our-remote-ssh/tsconfig.json
 rm -rf "$APP_EXTENSIONS_DIR/our-remote-ssh"
 mkdir -p "$APP_EXTENSIONS_DIR"
 ditto "$ROOT/extensions/our-remote-ssh" "$APP_EXTENSIONS_DIR/our-remote-ssh"
+
+echo "[remote-ai-local-dmg] refreshing extension signature verifier..."
+node "$ROOT/node_modules/@vscode/vsce-sign/src/postinstall.js"
+for package_name in "@vscode/vsce-sign" "@vscode/vsce-sign-$VSCODE_PLATFORM_ARCH"; do
+	if [[ ! -d "$ROOT/node_modules/$package_name" ]]; then
+		echo "Missing runtime dependency: node_modules/$package_name" >&2
+		echo "Run npm install before packaging the local DMG." >&2
+		exit 1
+	fi
+
+	rm -rf "$APP_NODE_MODULES_DIR/$package_name"
+	mkdir -p "$(dirname "$APP_NODE_MODULES_DIR/$package_name")"
+	ditto "$ROOT/node_modules/$package_name" "$APP_NODE_MODULES_DIR/$package_name"
+done
 
 scripts/remote-ai-sign-darwin-local.sh "$APP_PATH"
 
