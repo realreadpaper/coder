@@ -135,7 +135,7 @@ jobs:
           (cd "$server_dir" && shasum -a 256 Aura-${release_tag}-remote-server-linux-x64.tar.gz > "Aura-${release_tag}-remote-server-linux-x64-SHA256SUMS.txt")
 
       - name: Upload remote server artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: aura-remote-server
           path: dist/remote-ai-release/server/**
@@ -210,7 +210,7 @@ jobs:
           (cd "$client_dir" && shasum -a 256 Aura-${release_tag}-darwin-${{ matrix.arch }}-* > "Aura-${release_tag}-darwin-${{ matrix.arch }}-SHA256SUMS.txt")
 
       - name: Upload macOS artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: aura-darwin-${{ matrix.arch }}
           path: dist/remote-ai-release/client/**
@@ -281,7 +281,7 @@ jobs:
           (cd "$client_dir" && shasum -a 256 *.{deb,rpm,gz} > "Aura-${release_tag}-linux-x64-SHA256SUMS.txt")
 
       - name: Upload Linux artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: aura-linux-x64
           path: dist/remote-ai-release/client/**
@@ -350,7 +350,7 @@ jobs:
           (cd "$client_dir" && sha256sum Aura-${release_tag}-win32-x64-* > "Aura-${release_tag}-win32-x64-SHA256SUMS.txt")
 
       - name: Upload Windows artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: aura-win32-x64
           path: dist/remote-ai-release/client/**
